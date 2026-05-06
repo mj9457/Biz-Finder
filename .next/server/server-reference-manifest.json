@@ -1,0 +1,58 @@
+{
+  "node": {
+    "408fa5607c0f89e6586501cde6fd8660cbef327c52": {
+      "workers": {
+        "app/page": {
+          "moduleId": "(rsc)/./node_modules/.pnpm/next@15.5.15_react-dom@19.2.5_react@19.2.5__react@19.2.5/node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22C%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%2C%5B%7B%22id%22%3A%22408fa5607c0f89e6586501cde6fd8660cbef327c52%22%2C%22exportedName%22%3A%22searchCompanies%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227f00516977e967d923165489087dd4d12b254ce06a%22%2C%22exportedName%22%3A%22getCompanies%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227f9fd0ebd3804a853320766aef373942d4cf1bd9c8%22%2C%22exportedName%22%3A%22getFilters%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227fe78c5cff3b5b647068f4dd44d0570b649ceb2657%22%2C%22exportedName%22%3A%22getCompany%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/page": "rsc"
+      },
+      "filename": "../C:\\project\\bf\\Biz-Finder\\app\\actions\\companyActions.ts",
+      "exportedName": "searchCompanies"
+    },
+    "7f00516977e967d923165489087dd4d12b254ce06a": {
+      "workers": {
+        "app/page": {
+          "moduleId": "(rsc)/./node_modules/.pnpm/next@15.5.15_react-dom@19.2.5_react@19.2.5__react@19.2.5/node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22C%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%2C%5B%7B%22id%22%3A%22408fa5607c0f89e6586501cde6fd8660cbef327c52%22%2C%22exportedName%22%3A%22searchCompanies%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227f00516977e967d923165489087dd4d12b254ce06a%22%2C%22exportedName%22%3A%22getCompanies%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227f9fd0ebd3804a853320766aef373942d4cf1bd9c8%22%2C%22exportedName%22%3A%22getFilters%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227fe78c5cff3b5b647068f4dd44d0570b649ceb2657%22%2C%22exportedName%22%3A%22getCompany%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/page": "rsc"
+      },
+      "filename": "../C:\\project\\bf\\Biz-Finder\\app\\actions\\companyActions.ts",
+      "exportedName": "getCompanies"
+    },
+    "7f9fd0ebd3804a853320766aef373942d4cf1bd9c8": {
+      "workers": {
+        "app/page": {
+          "moduleId": "(rsc)/./node_modules/.pnpm/next@15.5.15_react-dom@19.2.5_react@19.2.5__react@19.2.5/node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22C%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%2C%5B%7B%22id%22%3A%22408fa5607c0f89e6586501cde6fd8660cbef327c52%22%2C%22exportedName%22%3A%22searchCompanies%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227f00516977e967d923165489087dd4d12b254ce06a%22%2C%22exportedName%22%3A%22getCompanies%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227f9fd0ebd3804a853320766aef373942d4cf1bd9c8%22%2C%22exportedName%22%3A%22getFilters%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227fe78c5cff3b5b647068f4dd44d0570b649ceb2657%22%2C%22exportedName%22%3A%22getCompany%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/page": "rsc"
+      },
+      "filename": "../C:\\project\\bf\\Biz-Finder\\app\\actions\\companyActions.ts",
+      "exportedName": "getFilters"
+    },
+    "7fe78c5cff3b5b647068f4dd44d0570b649ceb2657": {
+      "workers": {
+        "app/page": {
+          "moduleId": "(rsc)/./node_modules/.pnpm/next@15.5.15_react-dom@19.2.5_react@19.2.5__react@19.2.5/node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22C%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%2C%5B%7B%22id%22%3A%22408fa5607c0f89e6586501cde6fd8660cbef327c52%22%2C%22exportedName%22%3A%22searchCompanies%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227f00516977e967d923165489087dd4d12b254ce06a%22%2C%22exportedName%22%3A%22getCompanies%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227f9fd0ebd3804a853320766aef373942d4cf1bd9c8%22%2C%22exportedName%22%3A%22getFilters%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%2C%7B%22id%22%3A%227fe78c5cff3b5b647068f4dd44d0570b649ceb2657%22%2C%22exportedName%22%3A%22getCompany%22%2C%22filename%22%3A%22..%2FC%3A%5C%5Cproject%5C%5Cbf%5C%5CBiz-Finder%5C%5Capp%5C%5Cactions%5C%5CcompanyActions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/page": "rsc"
+      },
+      "filename": "../C:\\project\\bf\\Biz-Finder\\app\\actions\\companyActions.ts",
+      "exportedName": "getCompany"
+    }
+  },
+  "edge": {},
+  "encryptionKey": "F3TAcjY5bNC/fd0goMKzaL2PaeZapTu7hu0L4O1mUbg="
+}

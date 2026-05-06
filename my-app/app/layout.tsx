@@ -1,0 +1,39 @@
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: {
+    default: "Biz Finder",
+    template: "%s | Biz Finder",
+  },
+  description: "통합 검색어, 지역, 업종으로 기업 정보를 검색하는 서비스",
+};
+
+export default async function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html
+      lang="ko"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="min-h-full bg-slate-50 text-slate-950">
+        {children}
+      </body>
+    </html>
+  );
+}
