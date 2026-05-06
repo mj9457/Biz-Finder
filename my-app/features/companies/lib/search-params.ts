@@ -1,11 +1,9 @@
 import {
-  CERTIFICATION_STATUSES,
   COMPANY_CATEGORIES,
   COMPANY_REGIONS,
   COMPANY_SORTS,
 } from "../data/categories";
 import type {
-  CertificationStatus,
   CompanyCategory,
   CompanyRegion,
   CompanySearchFilters,
@@ -18,12 +16,12 @@ export type RawSearchParams = Record<
   string | string[] | undefined
 >;
 
-export const DEFAULT_PAGE_SIZE = 6;
+export const DEFAULT_PAGE_SIZE = 10;
+const DEFAULT_CARD_PAGE_SIZE = 6;
 export const DEFAULT_COMPANY_VIEW: CompanyView = "table";
 
 const categorySet = new Set<string>(COMPANY_CATEGORIES);
 const regionSet = new Set<string>(COMPANY_REGIONS);
-const certificationStatusSet = new Set<string>(CERTIFICATION_STATUSES);
 const sortSet = new Set<string>(COMPANY_SORTS);
 
 function firstValue(value: string | string[] | undefined) {
@@ -53,13 +51,6 @@ function parseRegion(value: string | string[] | undefined) {
   return regionSet.has(region) ? (region as CompanyRegion) : "";
 }
 
-function parseCertificationStatus(value: string | string[] | undefined) {
-  const status = compactText(value);
-  return certificationStatusSet.has(status)
-    ? (status as CertificationStatus)
-    : "";
-}
-
 function parseSort(value: string | string[] | undefined): CompanySort {
   const sort = firstValue(value);
   return sortSet.has(sort) ? (sort as CompanySort) : "relevance";
@@ -77,6 +68,8 @@ function parsePage(value: string | string[] | undefined) {
 export function parseCompanySearchParams(
   params: RawSearchParams,
 ): CompanySearchFilters {
+  const view = parseView(params.view);
+
   return {
     q:
       compactText(params.q) ||
@@ -84,12 +77,11 @@ export function parseCompanySearchParams(
       compactText(params.representative) ||
       compactText(params.product),
     region: parseRegion(params.region),
-    certificationStatus: parseCertificationStatus(params.certification),
     categories: parseCategories(params.category),
     sort: parseSort(params.sort),
-    view: parseView(params.view),
+    view,
     page: parsePage(params.page),
-    pageSize: DEFAULT_PAGE_SIZE,
+    pageSize: view === "card" ? DEFAULT_CARD_PAGE_SIZE : DEFAULT_PAGE_SIZE,
   };
 }
 
@@ -110,9 +102,6 @@ export function createCompanySearchHref(
   const params = new URLSearchParams();
   if (nextFilters.q) params.set("q", nextFilters.q);
   if (nextFilters.region) params.set("region", nextFilters.region);
-  if (nextFilters.certificationStatus) {
-    params.set("certification", nextFilters.certificationStatus);
-  }
   for (const category of nextFilters.categories) {
     params.append("category", category);
   }
@@ -128,7 +117,6 @@ export function hasActiveCompanyFilters(filters: CompanySearchFilters) {
   return Boolean(
     filters.q ||
       filters.region ||
-      filters.certificationStatus ||
       filters.categories.length > 0,
   );
 }

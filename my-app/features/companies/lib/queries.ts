@@ -2,23 +2,243 @@ import "server-only";
 
 import { cache } from "react";
 
+import { supabase } from "@/lib/supabase";
 import {
-  CERTIFICATION_STATUSES,
   COMPANY_CATEGORIES,
   COMPANY_REGIONS,
+  INDUSTRY_CHAMBER_CATEGORY_MAP,
 } from "../data/categories";
-import { companies } from "../data/companies";
 import type {
   Company,
+  CompanyCategory,
   CompanyFacetOption,
   CompanyFacets,
   CompanySearchFilters,
   CompanySearchResult,
 } from "../types";
 
+type CompanyRow = {
+  id: number;
+  created_at: string;
+  business_number: string | null;
+  company_type: string | null;
+  location: string | null;
+  industry_chamber: string | null;
+  industry_code: string | null;
+  standard_industry: string | null;
+  company_name: string | null;
+  ceo_name: string | null;
+  position: string | null;
+  postal_code: string | null;
+  address: string | null;
+  phone: string | null;
+  fax: string | null;
+  email: string | null;
+  employee_count: number | null;
+  main_products: string | null;
+  is_closed: string | null;
+  dm_excluded: string | null;
+  established_date: string | null;
+  member_type_2026: string | null;
+  website: string | null;
+  description: string | null;
+  tags: string | null;
+};
+
+const SUPABASE_PAGE_LIMIT = 10_000;
+const industryChamberCategoryEntries = Object.entries(
+  INDUSTRY_CHAMBER_CATEGORY_MAP,
+) as Array<[string, CompanyCategory]>;
+
 function includesText(source: string, keyword: string) {
   return source.toLocaleLowerCase("ko-KR").includes(keyword);
 }
+
+function splitTextList(value: string | null) {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(/[,/|·\n\r]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeRegion(location: string | null, address: string | null) {
+  const source = `${location ?? ""} ${address ?? ""}`;
+
+  for (const region of COMPANY_REGIONS) {
+    if (source.includes(region)) {
+      return region;
+    }
+  }
+
+  return location?.trim() ?? "";
+}
+
+function compactIndustryName(value: string) {
+  return value.replace(/[\s·ㆍ/(),.-]+/g, "");
+}
+
+function normalizeIndustryChamberCategory(value: string | null) {
+  const industryChamber = value?.trim();
+
+  if (!industryChamber) {
+    return null;
+  }
+
+  const exactCategory =
+    INDUSTRY_CHAMBER_CATEGORY_MAP[
+      industryChamber as keyof typeof INDUSTRY_CHAMBER_CATEGORY_MAP
+    ];
+
+  if (exactCategory) {
+    return exactCategory;
+  }
+
+  const compactValue = compactIndustryName(industryChamber);
+  const matchedEntry = industryChamberCategoryEntries.find(
+    ([source]) => compactIndustryName(source) === compactValue,
+  );
+
+  return matchedEntry?.[1] ?? null;
+}
+
+function normalizeCategories(row: CompanyRow) {
+  const industryChamberCategory = normalizeIndustryChamberCategory(
+    row.industry_chamber,
+  );
+
+  if (industryChamberCategory) {
+    return [industryChamberCategory];
+  }
+
+  const source = [
+    row.company_type,
+    row.industry_chamber,
+    row.standard_industry,
+    row.industry_code,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const categories = COMPANY_CATEGORIES.filter((category) =>
+    source.includes(category),
+  );
+
+  if (categories.length > 0) {
+    return categories;
+  }
+
+  if (source.includes("제조")) return ["제조"];
+  if (
+    source.includes("유통") ||
+    source.includes("도매") ||
+    source.includes("소매")
+  ) {
+    return ["유통"];
+  }
+  if (source.includes("건설")) {
+    return ["건설"];
+  }
+  if (source.includes("부동산") || source.includes("임대")) {
+    return ["부동산 & 임대"];
+  }
+  if (source.includes("운수") || source.includes("물류") || source.includes("창고")) {
+    return ["운수"];
+  }
+  if (source.includes("숙박") || source.includes("음식점")) {
+    return ["숙박 & 음식점"];
+  }
+  if (
+    source.includes("환경") ||
+    source.includes("폐기물") ||
+    source.includes("원료재생")
+  ) {
+    return ["환경"];
+  }
+  if (source.includes("광업")) return ["광"];
+  if (source.includes("금융") || source.includes("보험")) return ["금융 & 보험"];
+  if (
+    source.includes("방송") ||
+    source.includes("통신") ||
+    source.includes("정보서비스") ||
+    source.includes("출판") ||
+    source.includes("영상")
+  ) {
+    return ["방송통신"];
+  }
+  if (
+    source.includes("전기") ||
+    source.includes("가스") ||
+    source.includes("증기") ||
+    source.includes("수도")
+  ) {
+    return ["전기 & 수도"];
+  }
+  if (
+    source.includes("서비스") ||
+    source.includes("전문") ||
+    source.includes("과학") ||
+    source.includes("기술") ||
+    source.includes("사업지원") ||
+    source.includes("사업시설관리")
+  ) {
+    return ["서비스"];
+  }
+
+  return source ? ["기타"] : [];
+}
+
+function mapCompany(row: CompanyRow): Company {
+  const products = splitTextList(row.main_products);
+  const categories = normalizeCategories(row) as CompanyCategory[];
+  const region = normalizeRegion(row.location, row.address);
+  const industry =
+    row.standard_industry ??
+    row.industry_chamber ??
+    row.industry_code ??
+    row.company_type ??
+    "";
+
+  return {
+    id: String(row.id),
+    name: row.company_name ?? "",
+    representative: row.ceo_name ?? "",
+    region,
+    district: "",
+    industry,
+    industryChamber: row.industry_chamber ?? "",
+    mainProduct: row.main_products ?? "",
+    products,
+    categories,
+    foundedDate: row.established_date ?? "",
+    employees: row.employee_count ?? 0,
+    revenueBand: "",
+    registrationNumber: row.business_number ?? "",
+    address: row.address ?? "",
+    contact: row.email ?? "",
+    phone: row.phone ?? "",
+    website: row.website ?? undefined,
+    description: row.description ?? "",
+    tags: splitTextList(row.tags),
+  };
+}
+
+const getCompanies = cache(async () => {
+  const { data, error } = await supabase
+    .from("companies")
+    .select("*")
+    .order("id", { ascending: true })
+    .range(0, SUPABASE_PAGE_LIMIT - 1);
+
+  if (error) {
+    throw new Error(`Failed to load companies from Supabase: ${error.message}`);
+  }
+
+  return ((data ?? []) as CompanyRow[]).map(mapCompany);
+});
 
 function scoreCompany(company: Company, filters: CompanySearchFilters) {
   let score = 0;
@@ -57,13 +277,6 @@ function matchesCompany(company: Company, filters: CompanySearchFilters) {
   }
 
   if (filters.region && company.region !== filters.region) {
-    return false;
-  }
-
-  if (
-    filters.certificationStatus &&
-    company.certificationStatus !== filters.certificationStatus
-  ) {
     return false;
   }
 
@@ -121,6 +334,7 @@ function countByOptions(options: readonly string[], values: string[]) {
 
 export const searchCompanies = cache(
   async (filters: CompanySearchFilters): Promise<CompanySearchResult> => {
+    const companies = await getCompanies();
     const scores = new Map<string, number>();
     const filtered = companies.filter((company) => {
       const score = scoreCompany(company, filters);
@@ -144,10 +358,12 @@ export const searchCompanies = cache(
 );
 
 export const getCompanyById = cache(async (id: string) => {
+  const companies = await getCompanies();
   return companies.find((company) => company.id === id) ?? null;
 });
 
 export const getCompanyFacets = cache(async (): Promise<CompanyFacets> => {
+  const companies = await getCompanies();
   const categoryCounts = new Map<string, number>(
     COMPANY_CATEGORIES.map((category) => [category, 0]),
   );
@@ -169,17 +385,15 @@ export const getCompanyFacets = cache(async (): Promise<CompanyFacets> => {
     ),
     industries: countBy(companies.map((company) => company.industry)),
     categories,
-    certificationStatuses: countByOptions(
-      CERTIFICATION_STATUSES,
-      companies.map((company) => company.certificationStatus),
-    ),
   };
 });
 
 export const getCompanyDirectoryStats = cache(async () => {
+  const companies = await getCompanies();
   return {
     totalCompanies: companies.length,
-    totalRegions: new Set(companies.map((company) => company.region)).size,
+    totalRegions: new Set(companies.map((company) => company.region).filter(Boolean))
+      .size,
     totalCategories: COMPANY_CATEGORIES.length,
   };
 });

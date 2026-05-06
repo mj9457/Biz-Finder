@@ -42,7 +42,6 @@ export function CompanyPageShell({
             "search",
             filters.q,
             filters.region,
-            filters.certificationStatus,
             filters.categories.join("|"),
           ].join("-")}
           filters={filters}

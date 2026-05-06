@@ -54,14 +54,6 @@ export function CompanyDetail({ company }: CompanyDetailProps) {
               {company.mainProduct}
             </dd>
           </div>
-          <div>
-            <dt className="text-xs font-medium uppercase text-slate-500">
-              인증정보
-            </dt>
-            <dd className="mt-1 font-medium text-slate-900">
-              {company.certificationInfo}
-            </dd>
-          </div>
         </dl>
         <div className="mt-8">
           <h2 className="text-base font-semibold text-slate-950">기업소개</h2>
@@ -129,14 +121,6 @@ export function CompanyDetail({ company }: CompanyDetailProps) {
               ) : (
                 <span className="text-sm font-medium text-slate-500">-</span>
               )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase text-slate-500">
-              인증 여부
-            </dt>
-            <dd className="mt-1 text-sm font-medium text-slate-900">
-              {company.certificationStatus}
             </dd>
           </div>
         </dl>

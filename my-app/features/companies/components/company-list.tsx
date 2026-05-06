@@ -18,7 +18,6 @@ function EmptyCompanyResult({ filters }: { filters: CompanySearchFilters }) {
   const resetHref = createCompanySearchHref(filters, {
     q: "",
     region: "",
-    certificationStatus: "",
     categories: [],
   });
 
@@ -43,6 +42,18 @@ function EmptyCompanyResult({ filters }: { filters: CompanySearchFilters }) {
 }
 
 export function CompanyList({ result, filters }: CompanyListProps) {
+  const pageWindowSize = 10;
+  const pageWindowStart =
+    Math.floor((result.page - 1) / pageWindowSize) * pageWindowSize + 1;
+  const pageWindowEnd = Math.min(
+    pageWindowStart + pageWindowSize - 1,
+    result.totalPages,
+  );
+  const visiblePages = Array.from(
+    { length: pageWindowEnd - pageWindowStart + 1 },
+    (_, index) => pageWindowStart + index,
+  );
+
   if (result.total === 0) {
     return <EmptyCompanyResult filters={filters} />;
   }
@@ -62,7 +73,7 @@ export function CompanyList({ result, filters }: CompanyListProps) {
       {result.totalPages > 1 ? (
         <nav
           aria-label="기업 검색 결과 페이지"
-          className="flex items-center justify-center gap-2 pt-2"
+          className="flex flex-wrap items-center justify-center gap-2 pt-2"
         >
           <Link
             aria-disabled={result.page <= 1}
@@ -75,8 +86,7 @@ export function CompanyList({ result, filters }: CompanyListProps) {
           >
             이전
           </Link>
-          {Array.from({ length: result.totalPages }, (_, index) => {
-            const page = index + 1;
+          {visiblePages.map((page) => {
             const isCurrent = page === result.page;
 
             return (

@@ -1,5 +1,4 @@
 import type {
-  CERTIFICATION_STATUSES,
   COMPANY_CATEGORIES,
   COMPANY_REGIONS,
   COMPANY_SORTS,
@@ -9,8 +8,6 @@ export type CompanyCategory = (typeof COMPANY_CATEGORIES)[number];
 
 export type CompanyRegion = (typeof COMPANY_REGIONS)[number];
 
-export type CertificationStatus = (typeof CERTIFICATION_STATUSES)[number];
-
 export type CompanySort = (typeof COMPANY_SORTS)[number];
 
 export type CompanyView = "table" | "card";
@@ -19,9 +16,10 @@ export type Company = {
   id: string;
   name: string;
   representative: string;
-  region: CompanyRegion;
+  region: string;
   district: string;
   industry: string;
+  industryChamber?: string;
   mainProduct: string;
   products: string[];
   categories: CompanyCategory[];
@@ -33,8 +31,6 @@ export type Company = {
   contact: string;
   phone: string;
   website?: string;
-  certificationStatus: CertificationStatus;
-  certificationInfo: string;
   description: string;
   tags: string[];
 };
@@ -47,6 +43,7 @@ export type CompanyListItem = Pick<
   | "region"
   | "district"
   | "industry"
+  | "industryChamber"
   | "mainProduct"
   | "categories"
   | "employees"
@@ -56,7 +53,6 @@ export type CompanyListItem = Pick<
 export type CompanySearchFilters = {
   q: string;
   region: string;
-  certificationStatus: string;
   categories: CompanyCategory[];
   sort: CompanySort;
   view: CompanyView;
@@ -73,7 +69,6 @@ export type CompanyFacets = {
   regions: CompanyFacetOption[];
   industries: CompanyFacetOption[];
   categories: CompanyFacetOption[];
-  certificationStatuses: CompanyFacetOption[];
 };
 
 export type CompanySearchResult = {

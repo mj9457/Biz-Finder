@@ -47,9 +47,6 @@ export function CompanySearchForm({
 
   const [keyword, setKeyword] = useState(filters.q);
   const [region, setRegion] = useState(filters.region);
-  const [certificationStatus, setCertificationStatus] = useState(
-    filters.certificationStatus,
-  );
   const [isIndustryFilterOpen, setIsIndustryFilterOpen] = useState(true);
   const [selectedCategories, setSelectedCategories] = useState<
     CompanyCategory[]
@@ -71,17 +68,15 @@ export function CompanySearchForm({
     const hasFilterChanges =
       nextKeyword !== filters.q ||
       region !== filters.region ||
-      certificationStatus !== filters.certificationStatus ||
       !hasSameCategories(selectedCategories, filters.categories);
 
     return createCompanySearchHref(filters, {
       q: nextKeyword,
       region,
-      certificationStatus,
       categories: selectedCategories,
       page: hasFilterChanges ? 1 : filters.page,
     });
-  }, [certificationStatus, filters, keyword, region, selectedCategories]);
+  }, [filters, keyword, region, selectedCategories]);
 
   useEffect(() => {
     const query = searchParams.toString();
@@ -111,7 +106,6 @@ export function CompanySearchForm({
   const resetHref = createCompanySearchHref(filters, {
     q: "",
     region: "",
-    certificationStatus: "",
     categories: [],
   });
 
@@ -206,23 +200,6 @@ export function CompanySearchForm({
                 );
               })}
             </div>
-          </label>
-          <label className="grid gap-2">
-            <span className="text-sm font-medium text-slate-700">
-              인증 여부
-            </span>
-            <select
-              value={certificationStatus}
-              onChange={(event) => setCertificationStatus(event.target.value)}
-              className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-            >
-              <option value="">전체</option>
-              {facets.certificationStatuses.map((statusOption) => (
-                <option key={statusOption.value} value={statusOption.value}>
-                  {statusOption.value} ({statusOption.count})
-                </option>
-              ))}
-            </select>
           </label>
         </div>
 

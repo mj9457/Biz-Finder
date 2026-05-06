@@ -38,13 +38,6 @@ export function ActiveFilterChips({ filters }: ActiveFilterChipsProps) {
     });
   }
 
-  if (filters.certificationStatus) {
-    chips.push({
-      label: `인증 여부: ${filters.certificationStatus}`,
-      href: createCompanySearchHref(filters, { certificationStatus: "" }),
-    });
-  }
-
   for (const category of filters.categories) {
     chips.push({
       label: `업종: ${category}`,
