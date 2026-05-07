@@ -3,10 +3,11 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import Link from "next/link";
+import { BriefcaseBusiness, Building2, MapPin, Menu } from "lucide-react";
 
-import type { CompanyFacets, CompanySearchFilters } from "../types";
 import { formatNumber } from "@/lib/format";
-import { CompanySearchForm } from "./company-search-form";
+import type { CompanyFacets, CompanySearchFilters } from "../types";
+import { CompanyFilterSidebar } from "./company-filter-sidebar";
 
 type CompanyPageShellProps = {
   children: ReactNode;
@@ -26,6 +27,13 @@ export function CompanyPageShell({
   stats,
 }: CompanyPageShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const sidebarKey = [
+    "filter",
+    filters.region,
+    filters.categories.join("|"),
+    filters.employeeRange,
+  ].join("-");
 
   return (
     <div
@@ -36,32 +44,64 @@ export function CompanyPageShell({
           : "lg:grid-cols-[64px_minmax(0,1fr)]",
       ].join(" ")}
     >
-      <div className="px-5 py-6 sm:px-8 lg:col-start-1 lg:row-start-1 lg:px-0 lg:py-0">
-        <CompanySearchForm
-          key={[
-            "search",
-            filters.q,
-            filters.region,
-            filters.categories.join("|"),
-          ].join("-")}
+      {isMobileSidebarOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            aria-label="필터 닫기"
+            className="absolute inset-0 bg-slate-950/40"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          />
+          <div className="relative h-full w-[min(360px,calc(100vw-48px))]">
+            <CompanyFilterSidebar
+              key={`${sidebarKey}-mobile`}
+              filters={filters}
+              facets={facets}
+              idPrefix="company-filter-mobile"
+              isMobileDrawer
+              onClose={() => setIsMobileSidebarOpen(false)}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="hidden px-5 py-6 sm:px-8 lg:col-start-1 lg:row-start-1 lg:block lg:px-0 lg:py-0">
+        <CompanyFilterSidebar
+          key={sidebarKey}
           filters={filters}
           facets={facets}
+          idPrefix="company-filter-desktop"
           isCollapsed={!isSidebarOpen}
           onToggleCollapsed={() => setIsSidebarOpen((current) => !current)}
         />
       </div>
+
       <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-1">
         <header className="border-b border-slate-200 bg-white">
           <div className="flex w-full flex-col gap-4 px-5 py-4 sm:px-8 md:flex-row md:items-center md:justify-between">
-            <Link
-              href="/companies"
-              className="text-lg font-semibold text-slate-950"
-            >
-              경기동부상공회의소 회원사 검색 서비스
-            </Link>
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                aria-controls="company-filter-mobile-fields"
+                aria-expanded={isMobileSidebarOpen}
+                aria-label="필터 열기"
+                title="필터 열기"
+                className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 lg:hidden"
+              >
+                <Menu className="size-5" aria-hidden="true" />
+              </button>
+              <Link
+                href="/companies"
+                className="min-w-0 text-lg font-semibold text-slate-950"
+              >
+                경기동부상공회의소 회원사 검색 서비스
+              </Link>
+            </div>
             <dl className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-md border border-slate-200 px-3 py-2">
-                <dt className="text-xs font-medium text-slate-500">
+                <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
+                  <Building2 className="size-3.5" aria-hidden="true" />
                   등록된 기업
                 </dt>
                 <dd className="mt-1 text-base font-semibold text-slate-950">
@@ -69,13 +109,22 @@ export function CompanyPageShell({
                 </dd>
               </div>
               <div className="rounded-md border border-slate-200 px-3 py-2">
-                <dt className="text-xs font-medium text-slate-500">지역</dt>
+                <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
+                  <MapPin className="size-3.5" aria-hidden="true" />
+                  지역
+                </dt>
                 <dd className="mt-1 text-base font-semibold text-slate-950">
                   {formatNumber(stats.totalRegions)}
                 </dd>
               </div>
               <div className="rounded-md border border-slate-200 px-3 py-2">
-                <dt className="text-xs font-medium text-slate-500">업종</dt>
+                <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
+                  <BriefcaseBusiness
+                    className="size-3.5"
+                    aria-hidden="true"
+                  />
+                  업종
+                </dt>
                 <dd className="mt-1 text-base font-semibold text-slate-950">
                   {formatNumber(stats.totalCategories)}
                 </dd>

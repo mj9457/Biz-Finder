@@ -1,17 +1,20 @@
 import "server-only";
 
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
+
 import { cache } from "react";
 
 import { supabase } from "@/lib/supabase";
 import {
   COMPANY_CATEGORIES,
+  COMPANY_EMPLOYEE_RANGES,
   COMPANY_REGIONS,
   INDUSTRY_CHAMBER_CATEGORY_MAP,
 } from "../data/categories";
 import type {
   Company,
   CompanyCategory,
-  CompanyFacetOption,
   CompanyFacets,
   CompanySearchFilters,
   CompanySearchResult,
@@ -46,6 +49,34 @@ type CompanyRow = {
 };
 
 const SUPABASE_PAGE_LIMIT = 10_000;
+const COMPANY_CACHE_REVALIDATE_SECONDS = 300;
+const COMPANY_CACHE_REVALIDATE_MS = COMPANY_CACHE_REVALIDATE_SECONDS * 1000;
+const COMPANY_FILE_CACHE_PATH = path.join(
+  process.cwd(),
+  ".next",
+  "cache",
+  "companies-directory.json",
+);
+const COMPANY_SELECT_COLUMNS = [
+  "id",
+  "business_number",
+  "company_type",
+  "location",
+  "industry_chamber",
+  "industry_code",
+  "standard_industry",
+  "company_name",
+  "ceo_name",
+  "address",
+  "phone",
+  "email",
+  "employee_count",
+  "main_products",
+  "established_date",
+  "website",
+  "description",
+  "tags",
+].join(",");
 const industryChamberCategoryEntries = Object.entries(
   INDUSTRY_CHAMBER_CATEGORY_MAP,
 ) as Array<[string, CompanyCategory]>;
@@ -226,10 +257,40 @@ function mapCompany(row: CompanyRow): Company {
   };
 }
 
-const getCompanies = cache(async () => {
+let companiesMemoryCache:
+  | {
+      data: Company[];
+      expiresAt: number;
+    }
+  | null = null;
+let companiesLoadPromise: Promise<Company[]> | null = null;
+
+async function readCompaniesFromFileCache() {
+  try {
+    const fileStat = await stat(COMPANY_FILE_CACHE_PATH);
+
+    if (Date.now() - fileStat.mtimeMs > COMPANY_CACHE_REVALIDATE_MS) {
+      return null;
+    }
+
+    const content = await readFile(COMPANY_FILE_CACHE_PATH, "utf8");
+    const data = JSON.parse(content) as Company[];
+
+    return Array.isArray(data) ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCompaniesToFileCache(data: Company[]) {
+  await mkdir(path.dirname(COMPANY_FILE_CACHE_PATH), { recursive: true });
+  await writeFile(COMPANY_FILE_CACHE_PATH, JSON.stringify(data), "utf8");
+}
+
+async function loadCompaniesFromSupabase() {
   const { data, error } = await supabase
     .from("companies")
-    .select("*")
+    .select(COMPANY_SELECT_COLUMNS)
     .order("id", { ascending: true })
     .range(0, SUPABASE_PAGE_LIMIT - 1);
 
@@ -237,7 +298,40 @@ const getCompanies = cache(async () => {
     throw new Error(`Failed to load companies from Supabase: ${error.message}`);
   }
 
-  return ((data ?? []) as CompanyRow[]).map(mapCompany);
+  return ((data ?? []) as unknown as CompanyRow[]).map(mapCompany);
+}
+
+const getCompanies = cache(async () => {
+  const now = Date.now();
+
+  if (companiesMemoryCache && companiesMemoryCache.expiresAt > now) {
+    return companiesMemoryCache.data;
+  }
+
+  const fileCache = await readCompaniesFromFileCache();
+
+  if (fileCache) {
+    companiesMemoryCache = {
+      data: fileCache,
+      expiresAt: now + COMPANY_CACHE_REVALIDATE_MS,
+    };
+    return fileCache;
+  }
+
+  companiesLoadPromise ??= loadCompaniesFromSupabase()
+    .then((data) => {
+      companiesMemoryCache = {
+        data,
+        expiresAt: Date.now() + COMPANY_CACHE_REVALIDATE_MS,
+      };
+      void writeCompaniesToFileCache(data).catch(() => undefined);
+      return data;
+    })
+    .finally(() => {
+      companiesLoadPromise = null;
+    });
+
+  return companiesLoadPromise;
 });
 
 function scoreCompany(company: Company, filters: CompanySearchFilters) {
@@ -257,6 +351,30 @@ function scoreCompany(company: Company, filters: CompanySearchFilters) {
   if (includesText(company.description, keyword)) score += 1;
 
   return score;
+}
+
+function matchesEmployeeRange(company: Company, filters: CompanySearchFilters) {
+  if (!filters.employeeRange) {
+    return true;
+  }
+
+  const range = COMPANY_EMPLOYEE_RANGES.find(
+    (option) => option.value === filters.employeeRange,
+  );
+
+  if (!range) {
+    return true;
+  }
+
+  if ("min" in range && company.employees < range.min) {
+    return false;
+  }
+
+  if ("max" in range && company.employees > range.max) {
+    return false;
+  }
+
+  return true;
 }
 
 function matchesCompany(company: Company, filters: CompanySearchFilters) {
@@ -287,6 +405,10 @@ function matchesCompany(company: Company, filters: CompanySearchFilters) {
     return false;
   }
 
+  if (!matchesEmployeeRange(company, filters)) {
+    return false;
+  }
+
   return true;
 }
 
@@ -295,17 +417,50 @@ function sortCompanies(
   filters: CompanySearchFilters,
   scores: Map<string, number>,
 ) {
+  const compareCompanyName = (a: Company, b: Company) =>
+    a.name.localeCompare(b.name, "ko-KR");
+  const compareRepresentative = (a: Company, b: Company) =>
+    a.representative.localeCompare(b.representative, "ko-KR");
+
   return items.toSorted((a, b) => {
-    if (filters.sort === "name") {
-      return a.name.localeCompare(b.name, "ko-KR");
+    if (filters.sort === "name-asc") {
+      return compareCompanyName(a, b) || compareRepresentative(a, b);
     }
 
-    if (filters.sort === "employees") {
-      return b.employees - a.employees;
+    if (filters.sort === "name-desc") {
+      return compareCompanyName(b, a) || compareRepresentative(a, b);
     }
 
-    return (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0);
+    if (filters.sort === "representative-asc") {
+      return compareRepresentative(a, b) || compareCompanyName(a, b);
+    }
+
+    if (filters.sort === "representative-desc") {
+      return compareRepresentative(b, a) || compareCompanyName(a, b);
+    }
+
+    return (
+      (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0) ||
+      compareCompanyName(a, b)
+    );
   });
+}
+
+function filterAndSortCompanies(
+  companies: Company[],
+  filters: CompanySearchFilters,
+) {
+  const scores = new Map<string, number>();
+  const filtered = companies.filter((company) => {
+    if (!matchesCompany(company, filters)) {
+      return false;
+    }
+
+    scores.set(company.id, scoreCompany(company, filters));
+    return true;
+  });
+
+  return sortCompanies(filtered, filters, scores);
 }
 
 function countBy(values: string[]) {
@@ -332,38 +487,7 @@ function countByOptions(options: readonly string[], values: string[]) {
   return options.map((value) => ({ value, count: counts.get(value) ?? 0 }));
 }
 
-export const searchCompanies = cache(
-  async (filters: CompanySearchFilters): Promise<CompanySearchResult> => {
-    const companies = await getCompanies();
-    const scores = new Map<string, number>();
-    const filtered = companies.filter((company) => {
-      const score = scoreCompany(company, filters);
-      scores.set(company.id, score);
-      return matchesCompany(company, filters);
-    });
-
-    const sorted = sortCompanies(filtered, filters, scores);
-    const totalPages = Math.max(1, Math.ceil(sorted.length / filters.pageSize));
-    const page = Math.min(filters.page, totalPages);
-    const start = (page - 1) * filters.pageSize;
-
-    return {
-      items: sorted.slice(start, start + filters.pageSize),
-      total: sorted.length,
-      page,
-      pageSize: filters.pageSize,
-      totalPages,
-    };
-  },
-);
-
-export const getCompanyById = cache(async (id: string) => {
-  const companies = await getCompanies();
-  return companies.find((company) => company.id === id) ?? null;
-});
-
-export const getCompanyFacets = cache(async (): Promise<CompanyFacets> => {
-  const companies = await getCompanies();
+function countCategories(companies: Company[]) {
   const categoryCounts = new Map<string, number>(
     COMPANY_CATEGORIES.map((category) => [category, 0]),
   );
@@ -374,8 +498,21 @@ export const getCompanyFacets = cache(async (): Promise<CompanyFacets> => {
     }
   }
 
-  const categories: CompanyFacetOption[] = [...categoryCounts.entries()].map(
-    ([value, count]) => ({ value, count }),
+  return [...categoryCounts.entries()].map(([value, count]) => ({
+    value,
+    count,
+  }));
+}
+
+function createCompanyFacets(companies: Company[]): CompanyFacets {
+  const categories = countCategories(companies);
+  const categoriesByRegion = Object.fromEntries(
+    COMPANY_REGIONS.map((region) => [
+      region,
+      countCategories(
+        companies.filter((company) => company.region === region),
+      ),
+    ]),
   );
 
   return {
@@ -385,15 +522,70 @@ export const getCompanyFacets = cache(async (): Promise<CompanyFacets> => {
     ),
     industries: countBy(companies.map((company) => company.industry)),
     categories,
+    categoriesByRegion,
   };
-});
+}
 
-export const getCompanyDirectoryStats = cache(async () => {
-  const companies = await getCompanies();
+function createCompanyDirectoryStats(companies: Company[]) {
   return {
     totalCompanies: companies.length,
     totalRegions: new Set(companies.map((company) => company.region).filter(Boolean))
       .size,
     totalCategories: COMPANY_CATEGORIES.length,
   };
+}
+
+function createCompanySearchResult(
+  companies: Company[],
+  filters: CompanySearchFilters,
+): CompanySearchResult {
+  const sorted = filterAndSortCompanies(companies, filters);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / filters.pageSize));
+  const page = Math.min(filters.page, totalPages);
+  const start = (page - 1) * filters.pageSize;
+
+  return {
+    items: sorted.slice(start, start + filters.pageSize),
+    total: sorted.length,
+    page,
+    pageSize: filters.pageSize,
+    totalPages,
+  };
+}
+
+export const searchCompanies = cache(
+  async (filters: CompanySearchFilters): Promise<CompanySearchResult> => {
+    const companies = await getCompanies();
+    return createCompanySearchResult(companies, filters);
+  },
+);
+
+export const getCompanyPageData = cache(async (filters: CompanySearchFilters) => {
+  const companies = await getCompanies();
+
+  return {
+    facets: createCompanyFacets(companies),
+    result: createCompanySearchResult(companies, filters),
+    stats: createCompanyDirectoryStats(companies),
+  };
+});
+
+export const getCompaniesForExport = cache(async (filters: CompanySearchFilters) => {
+  const companies = await getCompanies();
+  return filterAndSortCompanies(companies, filters);
+});
+
+export const getCompanyById = cache(async (id: string) => {
+  const companies = await getCompanies();
+  return companies.find((company) => company.id === id) ?? null;
+});
+
+export const getCompanyFacets = cache(async (): Promise<CompanyFacets> => {
+  const companies = await getCompanies();
+  return createCompanyFacets(companies);
+});
+
+export const getCompanyDirectoryStats = cache(async () => {
+  const companies = await getCompanies();
+  return createCompanyDirectoryStats(companies);
 });

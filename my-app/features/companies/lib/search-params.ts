@@ -1,10 +1,12 @@
 import {
   COMPANY_CATEGORIES,
+  COMPANY_EMPLOYEE_RANGES,
   COMPANY_REGIONS,
   COMPANY_SORTS,
 } from "../data/categories";
 import type {
   CompanyCategory,
+  CompanyEmployeeRange,
   CompanyRegion,
   CompanySearchFilters,
   CompanySort,
@@ -21,6 +23,9 @@ const DEFAULT_CARD_PAGE_SIZE = 6;
 export const DEFAULT_COMPANY_VIEW: CompanyView = "table";
 
 const categorySet = new Set<string>(COMPANY_CATEGORIES);
+const employeeRangeSet = new Set<string>(
+  COMPANY_EMPLOYEE_RANGES.map((range) => range.value),
+);
 const regionSet = new Set<string>(COMPANY_REGIONS);
 const sortSet = new Set<string>(COMPANY_SORTS);
 
@@ -51,8 +56,22 @@ function parseRegion(value: string | string[] | undefined) {
   return regionSet.has(region) ? (region as CompanyRegion) : "";
 }
 
+function parseEmployeeRange(
+  value: string | string[] | undefined,
+): CompanyEmployeeRange | "" {
+  const employeeRange = compactText(value);
+  return employeeRangeSet.has(employeeRange)
+    ? (employeeRange as CompanyEmployeeRange)
+    : "";
+}
+
 function parseSort(value: string | string[] | undefined): CompanySort {
   const sort = firstValue(value);
+
+  if (sort === "name") {
+    return "name-asc";
+  }
+
   return sortSet.has(sort) ? (sort as CompanySort) : "relevance";
 }
 
@@ -78,6 +97,7 @@ export function parseCompanySearchParams(
       compactText(params.product),
     region: parseRegion(params.region),
     categories: parseCategories(params.category),
+    employeeRange: parseEmployeeRange(params.employees),
     sort: parseSort(params.sort),
     view,
     page: parsePage(params.page),
@@ -100,12 +120,7 @@ export function createCompanySearchHref(
   };
 
   const params = new URLSearchParams();
-  if (nextFilters.q) params.set("q", nextFilters.q);
-  if (nextFilters.region) params.set("region", nextFilters.region);
-  for (const category of nextFilters.categories) {
-    params.append("category", category);
-  }
-  if (nextFilters.sort !== "relevance") params.set("sort", nextFilters.sort);
+  appendCompanyFilterParams(params, nextFilters);
   if (nextFilters.view !== DEFAULT_COMPANY_VIEW) params.set("view", nextFilters.view);
   if (nextFilters.page > 1) params.set("page", String(nextFilters.page));
 
@@ -113,10 +128,34 @@ export function createCompanySearchHref(
   return query ? `/companies?${query}` : "/companies";
 }
 
+function appendCompanyFilterParams(
+  params: URLSearchParams,
+  filters: CompanySearchFilters,
+) {
+  if (filters.q) params.set("q", filters.q);
+  if (filters.region) params.set("region", filters.region);
+  for (const category of filters.categories) {
+    params.append("category", category);
+  }
+  if (filters.employeeRange) {
+    params.set("employees", filters.employeeRange);
+  }
+  if (filters.sort !== "relevance") params.set("sort", filters.sort);
+}
+
+export function createCompanyExportSearchParams(
+  filters: CompanySearchFilters,
+) {
+  const params = new URLSearchParams();
+  appendCompanyFilterParams(params, filters);
+  return params;
+}
+
 export function hasActiveCompanyFilters(filters: CompanySearchFilters) {
   return Boolean(
     filters.q ||
       filters.region ||
+      filters.employeeRange ||
       filters.categories.length > 0,
   );
 }

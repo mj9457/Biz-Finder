@@ -1,5 +1,6 @@
 import type {
   COMPANY_CATEGORIES,
+  COMPANY_EMPLOYEE_RANGES,
   COMPANY_REGIONS,
   COMPANY_SORTS,
 } from "./data/categories";
@@ -7,6 +8,9 @@ import type {
 export type CompanyCategory = (typeof COMPANY_CATEGORIES)[number];
 
 export type CompanyRegion = (typeof COMPANY_REGIONS)[number];
+
+export type CompanyEmployeeRange =
+  (typeof COMPANY_EMPLOYEE_RANGES)[number]["value"];
 
 export type CompanySort = (typeof COMPANY_SORTS)[number];
 
@@ -52,8 +56,9 @@ export type CompanyListItem = Pick<
 
 export type CompanySearchFilters = {
   q: string;
-  region: string;
+  region: CompanyRegion | "";
   categories: CompanyCategory[];
+  employeeRange: CompanyEmployeeRange | "";
   sort: CompanySort;
   view: CompanyView;
   page: number;
@@ -69,6 +74,7 @@ export type CompanyFacets = {
   regions: CompanyFacetOption[];
   industries: CompanyFacetOption[];
   categories: CompanyFacetOption[];
+  categoriesByRegion: Partial<Record<CompanyRegion, CompanyFacetOption[]>>;
 };
 
 export type CompanySearchResult = {

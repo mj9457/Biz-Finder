@@ -5,6 +5,7 @@ import {
   hasActiveCompanyFilters,
 } from "../lib/search-params";
 import { getSelectedCategoryFilterClassName } from "../lib/category-style";
+import { COMPANY_EMPLOYEE_RANGES } from "../data/categories";
 import type { CompanyCategory, CompanySearchFilters } from "../types";
 
 type ActiveFilterChipsProps = {
@@ -35,6 +36,17 @@ export function ActiveFilterChips({ filters }: ActiveFilterChipsProps) {
     chips.push({
       label: `지역: ${filters.region}`,
       href: createCompanySearchHref(filters, { region: "" }),
+    });
+  }
+
+  if (filters.employeeRange) {
+    const employeeRange = COMPANY_EMPLOYEE_RANGES.find(
+      (option) => option.value === filters.employeeRange,
+    );
+
+    chips.push({
+      label: `근로자수: ${employeeRange?.label ?? filters.employeeRange}`,
+      href: createCompanySearchHref(filters, { employeeRange: "" }),
     });
   }
 

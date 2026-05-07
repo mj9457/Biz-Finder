@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LayoutGrid, Table2 } from "lucide-react";
 
 import { createCompanySearchHref } from "../lib/search-params";
 import type { CompanySearchFilters, CompanyView } from "../types";
@@ -7,10 +8,14 @@ type CompanyViewToggleProps = {
   filters: CompanySearchFilters;
 };
 
-const viewOptions: { value: CompanyView; label: string }[] = [
-  { value: "table", label: "테이블" },
-  { value: "card", label: "카드" },
-];
+const viewOptions = [
+  { value: "table", label: "테이블", Icon: Table2 },
+  { value: "card", label: "카드", Icon: LayoutGrid },
+] satisfies Array<{
+  value: CompanyView;
+  label: string;
+  Icon: typeof Table2;
+}>;
 
 export function CompanyViewToggle({ filters }: CompanyViewToggleProps) {
   return (
@@ -20,6 +25,7 @@ export function CompanyViewToggle({ filters }: CompanyViewToggleProps) {
     >
       {viewOptions.map((option) => {
         const isActive = filters.view === option.value;
+        const Icon = option.Icon;
 
         return (
           <Link
@@ -36,6 +42,7 @@ export function CompanyViewToggle({ filters }: CompanyViewToggleProps) {
                 : "text-slate-600 hover:bg-primary/10 hover:text-slate-950",
             ].join(" ")}
           >
+            <Icon className="mr-1.5 size-4" aria-hidden="true" />
             {option.label}
           </Link>
         );

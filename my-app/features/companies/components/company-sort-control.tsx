@@ -32,8 +32,10 @@ export function CompanySortControl({ filters }: CompanySortControlProps) {
         className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-slate-100"
       >
         <option value="relevance">관련도순</option>
-        <option value="name">기업명순</option>
-        <option value="employees">직원수순</option>
+        <option value="name-asc">기업명 오름차순</option>
+        <option value="name-desc">기업명 내림차순</option>
+        <option value="representative-asc">대표자명 오름차순</option>
+        <option value="representative-desc">대표자명 내림차순</option>
       </select>
     </label>
   );
