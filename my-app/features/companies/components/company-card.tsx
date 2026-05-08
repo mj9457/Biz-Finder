@@ -52,28 +52,34 @@ export function CompanyCard({
             </dd>
           </div>
           <div className="flex min-w-0 items-center justify-between gap-3">
+            <dt className="shrink-0 text-slate-500">업종</dt>
+            <dd className="min-w-0 truncate text-right font-medium text-slate-900">
+              {company.categories.join(", ")}
+            </dd>
+          </div>
+          <div className="flex min-w-0 items-center justify-between gap-3">
             <dt className="shrink-0 text-slate-500">주요품목</dt>
             <dd className="min-w-0 truncate text-right font-medium text-slate-900">
               {company.mainProduct}
             </dd>
           </div>
           <div className="flex min-w-0 items-center justify-between gap-3">
-            <dt className="shrink-0 text-slate-500">업종</dt>
+            <dt className="shrink-0 text-slate-500">종업원수</dt>
             <dd className="min-w-0 truncate text-right font-medium text-slate-900">
-              {company.categories.join(", ")}
+              {formatEmployees(company.employees)}
             </dd>
           </div>
         </dl>
 
         <div className="mt-auto">
-          <div className="mt-5 flex min-w-0 items-center justify-between gap-3 border-t border-slate-100 pt-4">
+          {/* <div className="mt-5 flex min-w-0 items-center justify-between gap-3 border-t border-slate-100 pt-4">
             <span className="min-w-0 truncate text-sm font-medium text-slate-600">
               {company.mainProduct}
             </span>
             <span className="shrink-0 text-xs font-medium text-slate-500">
               {formatEmployees(company.employees)}
             </span>
-          </div>
+          </div> */}
 
           <Link
             href={href}

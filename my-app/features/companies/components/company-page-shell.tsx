@@ -98,11 +98,16 @@ export function CompanyPageShell({
                 className="flex min-w-0 flex-col"
               >
                 <Image
-                  src="/logo-white.png"
+                  src="/logo-white-header.png"
                   alt="경기동부상공회의소"
-                  width={256}
-                  height={35}
-                  priority
+                  width={480}
+                  height={66}
+                  sizes="(min-width: 640px) 240px, 192px"
+                  preload
+                  fetchPriority="high"
+                  loading="eager"
+                  decoding="sync"
+                  unoptimized
                   className="h-auto w-48 sm:w-60"
                 />
                 <span className="mt-2 text-sm font-medium leading-none text-gray-500 sm:text-sm">
