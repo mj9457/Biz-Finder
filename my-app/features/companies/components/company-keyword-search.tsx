@@ -33,7 +33,7 @@ export function CompanyKeywordSearch({ filters }: CompanyKeywordSearchProps) {
     <form
       onSubmit={handleSubmit}
       aria-busy={isPending}
-      className="flex w-full flex-col gap-2 sm:max-w-xl sm:flex-row sm:items-center"
+      className="grid w-full grid-cols-[1fr_40px] items-center gap-2 sm:flex sm:max-w-xl sm:flex-row"
     >
       <label className="relative block min-w-0 flex-1">
         <span className="sr-only">통합 검색</span>
@@ -51,10 +51,12 @@ export function CompanyKeywordSearch({ filters }: CompanyKeywordSearchProps) {
       <button
         type="submit"
         disabled={isPending}
-        className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-md bg-primary px-0 text-sm font-semibold text-white transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-4"
       >
         <Search className="size-4" aria-hidden="true" />
-        <span>{isPending ? "검색 중" : "검색"}</span>
+        <span className="sr-only sm:not-sr-only">
+          {isPending ? "검색 중" : "검색"}
+        </span>
       </button>
     </form>
   );

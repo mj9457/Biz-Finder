@@ -30,7 +30,7 @@ export function CompanyCsvDownload({ filters }: CompanyCsvDownloadProps) {
     const trimmedCode = authCode.trim();
 
     if (!trimmedCode) {
-      setError("인증문자를 입력해 주세요.");
+      setError("인증번호를 입력해 주세요.");
       return;
     }
 
@@ -45,7 +45,7 @@ export function CompanyCsvDownload({ filters }: CompanyCsvDownloadProps) {
       });
 
       if (response.status === 401) {
-        setError("인증문자가 올바르지 않습니다.");
+        setError("인증번호가 올바르지 않습니다.");
         return;
       }
 
@@ -79,10 +79,10 @@ export function CompanyCsvDownload({ filters }: CompanyCsvDownloadProps) {
   }
 
   return (
-    <div className="flex flex-col items-stretch gap-1 sm:items-end">
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="relative block">
-          <span className="sr-only">CSV 다운로드 인증문자</span>
+    <div className="flex w-full flex-col items-stretch gap-1 sm:w-auto sm:items-end">
+      <div className="grid w-full grid-cols-2 items-center gap-2 sm:flex sm:w-auto">
+        <label className="relative block min-w-0">
+          <span className="sr-only">CSV 다운로드 인증번호</span>
           <KeyRound
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
             aria-hidden="true"
@@ -94,15 +94,15 @@ export function CompanyCsvDownload({ filters }: CompanyCsvDownloadProps) {
             autoComplete="off"
             onChange={(event) => setAuthCode(event.target.value)}
             onKeyDown={handleCodeKeyDown}
-            placeholder="인증문자"
-            className="h-10 w-36 rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+            placeholder="인증번호"
+            className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 sm:w-36"
           />
         </label>
         <button
           type="button"
           onClick={() => void downloadCsv()}
           disabled={isPending}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           <Download className="size-4" aria-hidden="true" />
           <span>{isPending ? "다운로드 중" : "CSV"}</span>

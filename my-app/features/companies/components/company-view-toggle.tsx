@@ -20,7 +20,7 @@ const viewOptions = [
 export function CompanyViewToggle({ filters }: CompanyViewToggleProps) {
   return (
     <div
-      className="inline-flex rounded-md border border-slate-300 bg-white p-1"
+      className="inline-flex w-full rounded-md border border-slate-300 bg-white p-1 sm:w-auto"
       aria-label="기업 목록 보기 방식"
     >
       {viewOptions.map((option) => {
@@ -36,7 +36,7 @@ export function CompanyViewToggle({ filters }: CompanyViewToggleProps) {
             })}
             aria-current={isActive ? "true" : undefined}
             className={[
-              "inline-flex h-8 min-w-16 items-center justify-center rounded px-3 text-sm font-semibold transition",
+              "inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded px-3 text-sm font-semibold transition sm:min-w-16 sm:flex-none",
               isActive
                 ? "bg-primary text-white"
                 : "text-slate-600 hover:bg-primary/10 hover:text-slate-950",

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import "./globals.css";
@@ -19,6 +19,11 @@ export const metadata: Metadata = {
     template: "%s | Biz Finder",
   },
   description: "통합 검색어, 지역, 업종으로 기업 정보를 검색하는 서비스",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default async function RootLayout({

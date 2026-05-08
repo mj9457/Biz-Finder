@@ -57,24 +57,35 @@ function EmptyCompanyResult({ filters }: { filters: CompanySearchFilters }) {
   );
 }
 
-export function CompanyList({ result, filters }: CompanyListProps) {
-  const pageWindowSize = 10;
-  const pageWindowStart =
-    Math.floor((result.page - 1) / pageWindowSize) * pageWindowSize + 1;
-  const pageWindowEnd = Math.min(
-    pageWindowStart + pageWindowSize - 1,
-    result.totalPages,
+function getVisiblePages(
+  currentPage: number,
+  totalPages: number,
+  pageWindowSize: number,
+) {
+  const halfWindow = Math.floor(pageWindowSize / 2);
+  const initialStart = Math.max(1, currentPage - halfWindow);
+  const end = Math.min(totalPages, initialStart + pageWindowSize - 1);
+  const start = Math.max(1, end - pageWindowSize + 1);
+
+  return Array.from(
+    { length: end - start + 1 },
+    (_, index) => start + index,
   );
-  const visiblePages = Array.from(
-    { length: pageWindowEnd - pageWindowStart + 1 },
-    (_, index) => pageWindowStart + index,
+}
+
+export function CompanyList({ result, filters }: CompanyListProps) {
+  const mobileVisiblePages = getVisiblePages(result.page, result.totalPages, 5);
+  const desktopVisiblePages = getVisiblePages(
+    result.page,
+    result.totalPages,
+    10,
   );
 
   return (
-    <section className="grid gap-4">
-      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:flex-row xl:items-start xl:justify-between">
+    <section className="grid min-w-0 gap-4">
+      <div className="flex min-w-0 max-w-[calc(100vw-40px)] flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:max-w-none xl:flex-row xl:items-start xl:justify-between">
         <CompanyKeywordSearch key={`search-${filters.q}`} filters={filters} />
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-end">
+        <div className="flex min-w-0 w-full flex-col gap-3 sm:flex-row sm:items-start sm:justify-end xl:w-auto">
           <CompanyCsvDownload filters={filters} />
           <CompanyViewToggle filters={filters} />
         </div>
@@ -91,15 +102,15 @@ export function CompanyList({ result, filters }: CompanyListProps) {
       {result.totalPages > 1 ? (
         <nav
           aria-label="기업 검색 결과 페이지"
-          className="flex flex-wrap items-center justify-center gap-2 pt-2"
+          className="flex w-full max-w-[calc(100vw-40px)] flex-nowrap items-center justify-center gap-1 pt-2 sm:max-w-none sm:flex-wrap sm:gap-2"
         >
           <Link
             aria-disabled={result.page <= 1}
             href={createCompanySearchHref(filters, { page: 1 })}
-            className="inline-flex h-10 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40"
+            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-0 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40 sm:h-10 sm:flex-none sm:px-3"
           >
-            <ChevronsLeft className="mr-1 size-4" aria-hidden="true" />
-            <span>처음</span>
+            <ChevronsLeft className="size-4 sm:mr-1" aria-hidden="true" />
+            <span className="sr-only sm:not-sr-only">처음</span>
           </Link>
           <Link
             aria-disabled={result.page <= 1}
@@ -108,30 +119,53 @@ export function CompanyList({ result, filters }: CompanyListProps) {
                 ? createCompanySearchHref(filters, { page: 1 })
                 : createCompanySearchHref(filters, { page: result.page - 1 })
             }
-            className="inline-flex h-10 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40"
+            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-0 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40 sm:h-10 sm:flex-none sm:px-3"
           >
-            <ChevronLeft className="mr-1 size-4" aria-hidden="true" />
-            <span>이전</span>
+            <ChevronLeft className="size-4 sm:mr-1" aria-hidden="true" />
+            <span className="sr-only sm:not-sr-only">이전</span>
           </Link>
-          {visiblePages.map((page) => {
-            const isCurrent = page === result.page;
+          <div className="contents sm:hidden">
+            {mobileVisiblePages.map((page) => {
+              const isCurrent = page === result.page;
 
-            return (
-              <Link
-                key={page}
-                aria-current={isCurrent ? "page" : undefined}
-                href={createCompanySearchHref(filters, { page })}
-                className={[
-                  "inline-flex size-10 items-center justify-center rounded-md border text-sm font-semibold transition",
-                  isCurrent
-                    ? "border-primary bg-primary text-white"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100",
-                ].join(" ")}
-              >
-                {page}
-              </Link>
-            );
-          })}
+              return (
+                <Link
+                  key={page}
+                  aria-current={isCurrent ? "page" : undefined}
+                  href={createCompanySearchHref(filters, { page })}
+                  className={[
+                    "inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-md border text-xs font-semibold transition",
+                    isCurrent
+                      ? "border-primary bg-primary text-white"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100",
+                  ].join(" ")}
+                >
+                  {page}
+                </Link>
+              );
+            })}
+          </div>
+          <div className="hidden sm:contents">
+            {desktopVisiblePages.map((page) => {
+              const isCurrent = page === result.page;
+
+              return (
+                <Link
+                  key={page}
+                  aria-current={isCurrent ? "page" : undefined}
+                  href={createCompanySearchHref(filters, { page })}
+                  className={[
+                    "inline-flex size-10 items-center justify-center rounded-md border text-sm font-semibold transition",
+                    isCurrent
+                      ? "border-primary bg-primary text-white"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100",
+                  ].join(" ")}
+                >
+                  {page}
+                </Link>
+              );
+            })}
+          </div>
           <Link
             aria-disabled={result.page >= result.totalPages}
             href={
@@ -139,18 +173,18 @@ export function CompanyList({ result, filters }: CompanyListProps) {
                 ? createCompanySearchHref(filters, { page: result.totalPages })
                 : createCompanySearchHref(filters, { page: result.page + 1 })
             }
-            className="inline-flex h-10 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40"
+            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-0 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40 sm:h-10 sm:flex-none sm:px-3"
           >
-            <span>다음</span>
-            <ChevronRight className="ml-1 size-4" aria-hidden="true" />
+            <span className="sr-only sm:not-sr-only">다음</span>
+            <ChevronRight className="size-4 sm:ml-1" aria-hidden="true" />
           </Link>
           <Link
             aria-disabled={result.page >= result.totalPages}
             href={createCompanySearchHref(filters, { page: result.totalPages })}
-            className="inline-flex h-10 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40"
+            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-0 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40 sm:h-10 sm:flex-none sm:px-3"
           >
-            <span>끝</span>
-            <ChevronsRight className="ml-1 size-4" aria-hidden="true" />
+            <span className="sr-only sm:not-sr-only">끝</span>
+            <ChevronsRight className="size-4 sm:ml-1" aria-hidden="true" />
           </Link>
         </nav>
       ) : null}
