@@ -9,7 +9,9 @@ import {
 } from "@/features/companies/lib/search-params";
 
 export const metadata: Metadata = {
-  title: "기업정보 검색",
+  title: "회원사 검색 서비스",
+  description:
+    "경기동부상공회의소 회원사를 통합 검색어, 지역, 업종 조건으로 검색하고 상세 정보를 확인할 수 있습니다.",
 };
 
 type CompaniesPageProps = {

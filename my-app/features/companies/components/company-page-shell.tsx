@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { BriefcaseBusiness, Building2, MapPin, Menu } from "lucide-react";
 
@@ -77,7 +78,7 @@ export function CompanyPageShell({
       </div>
 
       <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-1">
-        <header className="border-b border-slate-200 bg-white">
+        <header className="border-b border-primary/30 bg-white">
           <div className="flex w-full flex-col gap-4 px-5 py-4 sm:px-8 md:flex-row md:items-center md:justify-between">
             <div className="flex min-w-0 items-center gap-3">
               <button
@@ -87,19 +88,30 @@ export function CompanyPageShell({
                 aria-expanded={isMobileSidebarOpen}
                 aria-label="필터 열기"
                 title="필터 열기"
-                className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 lg:hidden"
+                className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-white/30 bg-white text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-white/40 lg:hidden"
               >
                 <Menu className="size-5" aria-hidden="true" />
               </button>
               <Link
                 href="/companies"
-                className="min-w-0 text-lg font-semibold text-slate-950"
+                aria-label="경기동부상공회의소 회원사 검색서비스 홈"
+                className="flex min-w-0 flex-col"
               >
-                경기동부상공회의소 회원사 검색 서비스
+                <Image
+                  src="/logo-white.png"
+                  alt="경기동부상공회의소"
+                  width={256}
+                  height={35}
+                  priority
+                  className="h-auto w-48 sm:w-60"
+                />
+                <span className="mt-2 text-sm font-medium leading-none text-gray-500 sm:text-sm">
+                  회원사 검색서비스
+                </span>
               </Link>
             </div>
             <dl className="grid grid-cols-3 gap-3 text-center">
-              <div className="rounded-md border border-slate-200 px-3 py-2">
+              <div className="rounded-md border border-white/60 bg-white/95 px-3 py-2">
                 <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
                   <Building2 className="size-3.5" aria-hidden="true" />
                   등록된 기업
@@ -108,7 +120,7 @@ export function CompanyPageShell({
                   {formatNumber(stats.totalCompanies)}
                 </dd>
               </div>
-              <div className="rounded-md border border-slate-200 px-3 py-2">
+              <div className="rounded-md border border-white/60 bg-white/95 px-3 py-2">
                 <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
                   <MapPin className="size-3.5" aria-hidden="true" />
                   지역
@@ -117,12 +129,9 @@ export function CompanyPageShell({
                   {formatNumber(stats.totalRegions)}
                 </dd>
               </div>
-              <div className="rounded-md border border-slate-200 px-3 py-2">
+              <div className="rounded-md border border-white/60 bg-white/95 px-3 py-2">
                 <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
-                  <BriefcaseBusiness
-                    className="size-3.5"
-                    aria-hidden="true"
-                  />
+                  <BriefcaseBusiness className="size-3.5" aria-hidden="true" />
                   업종
                 </dt>
                 <dd className="mt-1 text-base font-semibold text-slate-950">
