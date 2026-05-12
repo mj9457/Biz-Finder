@@ -115,7 +115,15 @@ export function CompanyPageShell({
                 </span>
               </Link>
             </div>
-            <dl className="grid grid-cols-3 gap-3 text-center">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+              <Link
+                href="/companies/map"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <MapPin className="size-4" aria-hidden="true" />
+                지도 대시보드
+              </Link>
+              <dl className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-md border border-white/60 bg-white/95 px-3 py-2">
                 <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
                   <Building2 className="size-3.5" aria-hidden="true" />
@@ -143,7 +151,8 @@ export function CompanyPageShell({
                   {formatNumber(stats.totalCategories)}
                 </dd>
               </div>
-            </dl>
+              </dl>
+            </div>
           </div>
         </header>
         <main className="min-w-0 flex-1">{children}</main>

@@ -575,6 +575,8 @@ export const getCompaniesForExport = cache(async (filters: CompanySearchFilters)
   return filterAndSortCompanies(companies, filters);
 });
 
+export const getCompaniesForMap = cache(async () => getCompanies());
+
 export const getCompanyById = cache(async (id: string) => {
   const companies = await getCompanies();
   return companies.find((company) => company.id === id) ?? null;

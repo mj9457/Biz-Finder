@@ -35,6 +35,8 @@ export type Company = {
   contact: string;
   phone: string;
   website?: string;
+  latitude?: number;
+  longitude?: number;
   description: string;
   tags: string[];
 };
@@ -83,4 +85,35 @@ export type CompanySearchResult = {
   page: number;
   pageSize: number;
   totalPages: number;
+};
+
+export type CompanyMapPoint = Pick<
+  Company,
+  | "id"
+  | "name"
+  | "region"
+  | "district"
+  | "industry"
+  | "industryChamber"
+  | "mainProduct"
+  | "categories"
+  | "address"
+  | "phone"
+> & {
+  lat: number;
+  lng: number;
+  primaryCategory: CompanyCategory | "기타";
+  isManufacturing: boolean;
+  isIndustrialArea: boolean;
+  coordinateSource: "database" | "estimated";
+};
+
+export type CompanyMapStats = {
+  totalCompanies: number;
+  manufacturingCompanies: number;
+  industrialAreaCompanies: number;
+  exactCoordinateCompanies: number;
+  estimatedCoordinateCompanies: number;
+  regionCounts: CompanyFacetOption[];
+  categoryCounts: CompanyFacetOption[];
 };
