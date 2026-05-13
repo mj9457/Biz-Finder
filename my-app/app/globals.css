@@ -30,6 +30,10 @@ body {
   border: 0;
 }
 
+.bf-region-outline {
+  pointer-events: none;
+}
+
 .bf-map-marker {
   position: relative;
   display: grid;
@@ -67,6 +71,27 @@ body {
 
 .bf-map-marker--manufacturing::before {
   border-width: 4px;
+}
+
+.bf-map-marker--active {
+  width: 38px;
+  height: 38px;
+  transform: translateY(-4px);
+}
+
+.bf-map-marker--active::before {
+  border-color: #f59e0b;
+  background: #ef4444;
+  box-shadow:
+    0 0 0 3px rgb(251 191 36 / 0.35),
+    0 14px 28px rgb(239 68 68 / 0.45);
+}
+
+.bf-map-marker--active .bf-map-marker__core {
+  width: 10px;
+  height: 10px;
+  border-color: #ffffff;
+  background: rgb(255 255 255 / 0.75);
 }
 
 .bf-map-marker--industrial::after {
@@ -126,50 +151,6 @@ body {
   color: #475569;
   font-size: 12px;
   line-height: 1.35;
-}
-
-.bf-map-tooltip--heat {
-  min-width: 180px;
-}
-
-.bf-map-tooltip__counts {
-  display: grid;
-  gap: 4px;
-  margin-top: 2px;
-}
-
-.bf-map-tooltip__counts span {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: #334155;
-}
-
-.bf-map-tooltip__counts b {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bf-map-tooltip__counts em {
-  flex-shrink: 0;
-  color: #0f172a;
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 800;
-}
-
-.bf-heat-halo {
-  pointer-events: none;
-}
-
-.bf-heat-pin {
-  cursor: pointer;
 }
 
 .bf-map-popup {

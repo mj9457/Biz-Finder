@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Building2, Factory, MapPin } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { CompanyMapDashboard } from "@/features/companies/components/company-map-dashboard";
 import { getCompanyMapData } from "@/features/companies/lib/map-data";
-import { formatNumber } from "@/lib/format";
 
 export const metadata: Metadata = {
   title: "회원사 지도 대시보드",
   description:
-    "경기동부상공회의소 회원사의 지역 분포를 클러스터 지도와 히트맵으로 확인할 수 있는 대시보드입니다.",
+    "경기동부상공회의소 회원사의 지역 분포를 클러스터 지도와 행정구역 경계로 확인할 수 있는 대시보드입니다.",
 };
 
 export const dynamic = "force-dynamic";
@@ -47,38 +46,9 @@ export default async function CompanyMapPage() {
               </span>
             </Link>
           </div>
-          <dl className="grid grid-cols-3 gap-3 text-center">
-            <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
-              <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
-                <Building2 className="size-3.5" aria-hidden="true" />
-                전체 기업
-              </dt>
-              <dd className="mt-1 text-base font-semibold text-slate-950">
-                {formatNumber(stats.totalCompanies)}
-              </dd>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
-              <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
-                <Factory className="size-3.5" aria-hidden="true" />
-                제조 기업
-              </dt>
-              <dd className="mt-1 text-base font-semibold text-slate-950">
-                {formatNumber(stats.manufacturingCompanies)}
-              </dd>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
-              <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
-                <MapPin className="size-3.5" aria-hidden="true" />
-                산업단지
-              </dt>
-              <dd className="mt-1 text-base font-semibold text-slate-950">
-                {formatNumber(stats.industrialAreaCompanies)}
-              </dd>
-            </div>
-          </dl>
         </div>
       </header>
-      <main className="px-5 py-6 sm:px-8">
+      <main className="px-0 py-0 sm:px-8">
         <CompanyMapDashboard points={points} stats={stats} />
       </main>
     </div>

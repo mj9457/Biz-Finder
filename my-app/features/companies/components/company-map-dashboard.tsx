@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Flame,
-  Layers,
+  ChevronUp,
   List,
   LocateFixed,
+  Menu,
   MapPin,
   RefreshCw,
   RotateCcw,
@@ -20,8 +21,10 @@ import type {
   Map as LeafletMap,
   MarkerClusterGroup,
 } from "leaflet";
+import type { GeoJsonObject } from "geojson";
 
 import { formatNumber } from "@/lib/format";
+import { REGION_BOUNDARIES } from "../data/map-region-boundaries";
 import type { CompanyMapPoint, CompanyMapStats } from "../types";
 
 type CompanyMapDashboardProps = {
@@ -29,33 +32,16 @@ type CompanyMapDashboardProps = {
   stats: CompanyMapStats;
 };
 
-type MapMode = "markers" | "heatmap";
-
-type HeatGroup = {
-  key: string;
-  lat: number;
-  lng: number;
-  count: number;
-  manufacturingCount: number;
-  categoryCounts: Array<{
-    category: string;
-    count: number;
-  }>;
-};
-
 type LeafletNamespace = typeof import("leaflet");
 
 const MAP_CENTER: [number, number] = [37.6906, 127.2817];
 const DEFAULT_ZOOM = 10;
 
-const markerModeOptions: Array<{
-  value: MapMode;
-  label: string;
-  icon: typeof Layers;
-}> = [
-  { value: "markers", label: "핀", icon: Layers },
-  { value: "heatmap", label: "히트맵", icon: Flame },
-];
+const REGION_OUTLINE_COLORS: Record<string, string> = {
+  남양주: "#0ea5e9",
+  구리: "#22c55e",
+  가평: "#f59e0b",
+};
 
 function getCategoryColor(category: string) {
   if (category.includes("제조")) return "#f97316";
@@ -112,13 +98,20 @@ function escapeHtml(value: string) {
   });
 }
 
-function buildMarkerHtml(point: CompanyMapPoint) {
-  const color = getCategoryColor(point.primaryCategory);
-  const ringColor = point.isIndustrialArea ? "#0f172a" : color;
+function buildMarkerHtml(point: CompanyMapPoint, isSelected = false) {
+  const color = isSelected
+    ? "#ef4444"
+    : getCategoryColor(point.primaryCategory);
+  const ringColor = isSelected
+    ? "#f59e0b"
+    : point.isIndustrialArea
+      ? "#0f172a"
+      : color;
   const classes = [
     "bf-map-marker",
     point.isManufacturing ? "bf-map-marker--manufacturing" : "",
     point.isIndustrialArea ? "bf-map-marker--industrial" : "",
+    isSelected ? "bf-map-marker--active" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -193,76 +186,6 @@ function matchesSearch(point: CompanyMapPoint, query: string) {
     .includes(query);
 }
 
-function buildHeatGroups(points: CompanyMapPoint[]): HeatGroup[] {
-  const cellSize = 0.025;
-  const groups = new Map<
-    string,
-    {
-      latTotal: number;
-      lngTotal: number;
-      count: number;
-      manufacturingCount: number;
-      categoryCounts: Map<string, number>;
-    }
-  >();
-
-  for (const point of points) {
-    const key = `${Math.round(point.lat / cellSize)}:${Math.round(
-      point.lng / cellSize,
-    )}`;
-    const group = groups.get(key) ?? {
-      latTotal: 0,
-      lngTotal: 0,
-      count: 0,
-      manufacturingCount: 0,
-      categoryCounts: new Map<string, number>(),
-    };
-
-    group.latTotal += point.lat;
-    group.lngTotal += point.lng;
-    group.count += 1;
-    group.manufacturingCount += point.isManufacturing ? 1 : 0;
-    group.categoryCounts.set(
-      point.primaryCategory,
-      (group.categoryCounts.get(point.primaryCategory) ?? 0) + 1,
-    );
-    groups.set(key, group);
-  }
-
-  return [...groups.entries()].map(([key, group]) => ({
-    key,
-    lat: group.latTotal / group.count,
-    lng: group.lngTotal / group.count,
-    count: group.count,
-    manufacturingCount: group.manufacturingCount,
-    categoryCounts: [...group.categoryCounts.entries()]
-      .map(([category, count]) => ({ category, count }))
-      .toSorted(
-        (a, b) => b.count - a.count || a.category.localeCompare(b.category),
-      ),
-  }));
-}
-
-function buildHeatGroupTooltipHtml(group: HeatGroup) {
-  const categoryRows = group.categoryCounts
-    .map(
-      ({ category, count }) =>
-        `<span><b>${escapeHtml(category)}</b><em>${formatNumber(
-          count,
-        )}개</em></span>`,
-    )
-    .join("");
-
-  return [
-    '<div class="bf-map-tooltip bf-map-tooltip--heat">',
-    `<strong>${formatNumber(group.count)}개 기업</strong>`,
-    '<div class="bf-map-tooltip__counts">',
-    categoryRows,
-    "</div>",
-    "</div>",
-  ].join("");
-}
-
 function createStatLabel(value: number, suffix = "개") {
   return `${formatNumber(value)}${suffix}`;
 }
@@ -296,16 +219,16 @@ export function CompanyMapDashboard({
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const clusterLayerRef = useRef<MarkerClusterGroup | null>(null);
-  const heatLayerRef = useRef<LayerGroup | null>(null);
+  const regionOutlineLayerRef = useRef<LayerGroup | null>(null);
   const leafletRef = useRef<LeafletNamespace | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
-  const [mode, setMode] = useState<MapMode>("markers");
   const [activeRegion, setActiveRegion] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [activeCompanyId, setActiveCompanyId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [mapRenderNonce, setMapRenderNonce] = useState(0);
-  const [isCompanyListOpen, setIsCompanyListOpen] = useState(true);
+  const [isCompanyListOpen, setIsCompanyListOpen] = useState(false);
 
   const normalizedQuery = normalizeSearchText(query);
   const filteredPoints = useMemo(
@@ -323,10 +246,42 @@ export function CompanyMapDashboard({
       }),
     [activeCategory, activeRegion, normalizedQuery, points],
   );
-  const heatGroups = useMemo(
-    () => buildHeatGroups(filteredPoints),
-    [filteredPoints],
+  const categoryCountBasePoints = useMemo(
+    () =>
+      points.filter((point) => {
+        if (activeRegion && point.region !== activeRegion) {
+          return false;
+        }
+
+        return matchesSearch(point, normalizedQuery);
+      }),
+    [activeRegion, normalizedQuery, points],
   );
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const point of categoryCountBasePoints) {
+      counts.set(
+        point.primaryCategory,
+        (counts.get(point.primaryCategory) ?? 0) + 1,
+      );
+    }
+
+    return stats.categoryCounts.map((category) => ({
+      value: category.value,
+      count: counts.get(category.value) ?? 0,
+    }));
+  }, [categoryCountBasePoints, stats.categoryCounts]);
+  const mapPoints = useMemo(() => {
+    if (!activeCompanyId) {
+      return filteredPoints;
+    }
+
+    const selected = filteredPoints.find(
+      (point) => point.id === activeCompanyId,
+    );
+    return selected ? [selected] : filteredPoints;
+  }, [activeCompanyId, filteredPoints]);
   const activeCompany = useMemo(
     () =>
       activeCompanyId
@@ -344,6 +299,49 @@ export function CompanyMapDashboard({
     [filteredPoints],
   );
   const hasActiveFilters = Boolean(activeRegion || activeCategory || query);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const syncCompanyListVisibility = () => {
+      setIsCompanyListOpen(mediaQuery.matches);
+    };
+
+    syncCompanyListVisibility();
+    mediaQuery.addEventListener("change", syncCompanyListVisibility);
+
+    return () => {
+      mediaQuery.removeEventListener("change", syncCompanyListVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    const desktopQuery = window.matchMedia("(min-width: 1280px)");
+    const closeSidebarOnDesktop = () => {
+      if (desktopQuery.matches) {
+        setIsSidebarOpen(false);
+      }
+    };
+
+    closeSidebarOnDesktop();
+    desktopQuery.addEventListener("change", closeSidebarOnDesktop);
+
+    return () => {
+      desktopQuery.removeEventListener("change", closeSidebarOnDesktop);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isSidebarOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isSidebarOpen]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -390,7 +388,7 @@ export function CompanyMapDashboard({
       mapRef.current = null;
       leafletRef.current = null;
       clusterLayerRef.current = null;
-      heatLayerRef.current = null;
+      regionOutlineLayerRef.current = null;
     };
   }, []);
 
@@ -407,104 +405,97 @@ export function CompanyMapDashboard({
       clusterLayerRef.current = null;
     }
 
-    if (heatLayerRef.current) {
-      map.removeLayer(heatLayerRef.current);
-      heatLayerRef.current = null;
+    if (regionOutlineLayerRef.current) {
+      map.removeLayer(regionOutlineLayerRef.current);
+      regionOutlineLayerRef.current = null;
     }
 
-    if (filteredPoints.length === 0) {
+    const regionOutlineLayer = L.layerGroup();
+
+    for (const region of REGION_BOUNDARIES) {
+      const isActiveRegion = activeRegion === region.region;
+      const color = REGION_OUTLINE_COLORS[region.region] ?? "#0f766e";
+      const geoJsonLayer = L.geoJSON(region.geometry as GeoJsonObject, {
+        style: {
+          color,
+          weight: isActiveRegion ? 4 : 3,
+          opacity: isActiveRegion ? 0.95 : 0.75,
+          fillColor: color,
+          fillOpacity: isActiveRegion ? 0.08 : 0.03,
+          dashArray: isActiveRegion ? undefined : "10 8",
+          className: "bf-region-outline",
+        },
+        interactive: false,
+        bubblingMouseEvents: false,
+      });
+
+      geoJsonLayer.addTo(regionOutlineLayer);
+    }
+
+    map.addLayer(regionOutlineLayer);
+    regionOutlineLayerRef.current = regionOutlineLayer;
+
+    if (mapPoints.length === 0) {
       return;
     }
 
-    if (mode === "markers") {
-      const clusterLayer = L.markerClusterGroup({
-        showCoverageOnHover: false,
-        spiderfyOnMaxZoom: true,
-        maxClusterRadius: 52,
-        iconCreateFunction(cluster) {
-          const count = cluster.getChildCount();
-          const sizeClass =
-            count >= 100 ? "large" : count >= 30 ? "medium" : "small";
+    const clusterLayer = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      maxClusterRadius: 52,
+      iconCreateFunction(cluster) {
+        const count = cluster.getChildCount();
+        const sizeClass =
+          count >= 100 ? "large" : count >= 30 ? "medium" : "small";
 
-          return L.divIcon({
-            html: `<span>${formatNumber(count)}</span>`,
-            className: `bf-map-cluster bf-map-cluster--${sizeClass}`,
-            iconSize: L.point(46, 46, true),
-          });
-        },
+        return L.divIcon({
+          html: `<span>${formatNumber(count)}</span>`,
+          className: `bf-map-cluster bf-map-cluster--${sizeClass}`,
+          iconSize: L.point(46, 46, true),
+        });
+      },
+    });
+
+    for (const point of mapPoints) {
+      const selected = activeCompanyId === point.id;
+      const iconSize = selected
+        ? point.isManufacturing
+          ? 42
+          : 38
+        : point.isManufacturing
+          ? 34
+          : 28;
+      const marker = L.marker([point.lat, point.lng], {
+        title: point.name,
+        icon: L.divIcon({
+          html: buildMarkerHtml(point, selected),
+          className: "bf-map-marker-icon",
+          iconSize: L.point(iconSize, iconSize, true),
+          iconAnchor: L.point(iconSize / 2, iconSize, true),
+        }),
+        keyboard: true,
+        zIndexOffset: selected ? 1000 : 0,
       });
 
-      for (const point of filteredPoints) {
-        const iconSize = point.isManufacturing ? 34 : 28;
-        const marker = L.marker([point.lat, point.lng], {
-          title: point.name,
-          icon: L.divIcon({
-            html: buildMarkerHtml(point),
-            className: "bf-map-marker-icon",
-            iconSize: L.point(iconSize, iconSize, true),
-            iconAnchor: L.point(iconSize / 2, iconSize, true),
-          }),
-          keyboard: true,
-        });
-
-        marker.bindTooltip(buildTooltipHtml(point), {
-          direction: "top",
-          offset: L.point(0, -14),
-          opacity: 1,
-          sticky: true,
-        });
-        marker.bindPopup(buildPopupHtml(point), {
-          closeButton: true,
-          minWidth: 220,
-        });
-        marker.on("focus click popupopen", () => setActiveCompanyId(point.id));
-        clusterLayer.addLayer(marker);
-      }
-
-      map.addLayer(clusterLayer);
-      clusterLayerRef.current = clusterLayer;
-    } else {
-      const heatLayer = L.layerGroup();
-
-      for (const group of heatGroups) {
-        const intensity = Math.min(group.count / 24, 1);
-        const radius = Math.min(8200, 1100 + group.count * 310);
-        const fillColor =
-          group.manufacturingCount > group.count / 2 ? "#f97316" : "#0284c7";
-        const circle = L.circle([group.lat, group.lng], {
-          radius,
-          interactive: false,
-          stroke: false,
-          className: "bf-heat-halo",
-          fillColor,
-          fillOpacity: 0.18 + intensity * 0.32,
-        });
-        const center = L.circleMarker([group.lat, group.lng], {
-          radius: Math.min(18, 7 + Math.sqrt(group.count) * 2),
-          color: "#ffffff",
-          weight: 2,
-          fillColor,
-          fillOpacity: 0.85,
-          bubblingMouseEvents: false,
-          className: "bf-heat-pin",
-        }).bindTooltip(buildHeatGroupTooltipHtml(group), {
-          direction: "top",
-          offset: L.point(0, -8),
-          opacity: 1,
-          sticky: true,
-        });
-
-        circle.addTo(heatLayer);
-        center.addTo(heatLayer);
-        center.bringToFront();
-      }
-
-      map.addLayer(heatLayer);
-      heatLayerRef.current = heatLayer;
+      marker.bindTooltip(buildTooltipHtml(point), {
+        direction: "top",
+        offset: L.point(0, -14),
+        opacity: 1,
+        sticky: true,
+      });
+      marker.bindPopup(buildPopupHtml(point), {
+        closeButton: true,
+        minWidth: 220,
+      });
+      marker.on("focus click popupopen", () => setActiveCompanyId(point.id));
+      clusterLayer.addLayer(marker);
     }
 
-    fitMapToPoints(L, map, filteredPoints);
-  }, [filteredPoints, heatGroups, isMapReady, mapRenderNonce, mode]);
+    map.addLayer(clusterLayer);
+    clusterLayerRef.current = clusterLayer;
+
+    fitMapToPoints(L, map, mapPoints);
+  }, [activeCompanyId, activeRegion, isMapReady, mapPoints, mapRenderNonce]);
 
   function resetFilters() {
     setActiveRegion(null);
@@ -524,11 +515,11 @@ export function CompanyMapDashboard({
     }
 
     map.invalidateSize({ animate: false });
-    fitMapToPoints(L, map, filteredPoints);
+    fitMapToPoints(L, map, mapPoints);
 
     window.setTimeout(() => {
       map.invalidateSize({ animate: false });
-      fitMapToPoints(L, map, filteredPoints);
+      fitMapToPoints(L, map, mapPoints);
     }, 120);
   }
 
@@ -547,42 +538,34 @@ export function CompanyMapDashboard({
   }
 
   return (
-    <section className="grid min-h-[calc(100vh-150px)] gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-      <div className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="flex min-w-0 flex-col gap-3 border-b border-slate-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 flex-col gap-1">
+    <section className="grid min-h-[calc(100vh-150px)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+      <div className="min-w-0 overflow-hidden bg-white shadow-sm md:rounded-lg md:border md:border-slate-200 xl:order-2">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 xl:hidden">
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold text-slate-950">
+              회원사 지도
+            </h1>
+            <p className="text-xs text-slate-500">필터 메뉴로 빠르게 검색</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(true)}
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <Menu className="size-4" aria-hidden="true" />
+            메뉴
+          </button>
+        </div>
+        <div className="hidden min-w-0 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 xl:flex">
+          <div className="min-w-0">
             <h1 className="text-xl font-semibold text-slate-950">
-              회원사 지도 대시보드
+              회원사 지도
             </h1>
             <p className="text-sm text-slate-600">
-              클러스터, 업종 필터, 히트맵으로 회원사 분포를 확인합니다.
+              지역·업종 필터로 회원사 위치를 확인합니다.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-md border border-slate-300 bg-slate-100 p-1">
-              {markerModeOptions.map((option) => {
-                const Icon = option.icon;
-                const selected = mode === option.value;
-
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setMode(option.value)}
-                    aria-pressed={selected}
-                    className={[
-                      "inline-flex h-9 items-center justify-center gap-2 rounded px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-primary/20",
-                      selected
-                        ? "bg-primary text-white shadow-sm"
-                        : "text-slate-600 hover:text-slate-950",
-                    ].join(" ")}
-                  >
-                    <Icon className="size-4" aria-hidden="true" />
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
             <button
               type="button"
               onClick={resetMapRender}
@@ -598,13 +581,12 @@ export function CompanyMapDashboard({
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <RotateCcw className="size-4" aria-hidden="true" />
-                초기화
+                필터 초기화
               </button>
             ) : null}
           </div>
         </div>
-
-        <div className="relative h-[560px] min-h-[560px] lg:h-[calc(100vh-230px)]">
+        <div className="relative h-[62vh] min-h-[380px] sm:h-[68vh] xl:h-[calc(100vh-230px)]">
           <div ref={mapElementRef} className="h-full w-full" />
           {!isMapReady ? (
             <div className="absolute inset-0 z-[500] grid place-items-center bg-white/80 text-sm font-semibold text-slate-700">
@@ -613,10 +595,10 @@ export function CompanyMapDashboard({
           ) : null}
           <div
             className={[
-              "absolute right-8 z-[550] transition-all duration-200",
+              "absolute z-[550] hidden md:block transition-all duration-200",
               isCompanyListOpen
-                ? "bottom-4 top-28 w-[calc(100%-32px)] sm:top-4 sm:w-80"
-                : "top-28 sm:top-4",
+                ? "inset-x-4 bottom-4 top-3 sm:inset-x-auto sm:right-4 sm:top-4 sm:w-80"
+                : "right-4 top-3 sm:top-4",
             ].join(" ")}
           >
             {isCompanyListOpen ? (
@@ -696,12 +678,12 @@ export function CompanyMapDashboard({
               </button>
             )}
           </div>
-          <div className="pointer-events-none absolute left-4 top-4 z-[500] grid max-w-[calc(100%-32px)] gap-2 sm:max-w-sm">
+          <div className="pointer-events-none absolute left-4 top-4 z-[500] hidden max-w-[calc(100%-32px)] gap-2 md:grid md:max-w-sm">
             <div className="rounded-lg border border-white/70 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 현재 우리 지역 회원사
               </p>
-              <strong className="mt-1 block text-3xl font-semibold text-slate-950">
+              <strong className="mt-1 block text-2xl font-semibold text-slate-950 sm:text-3xl">
                 {createStatLabel(filteredPoints.length)}
               </strong>
               <span className="mt-1 block text-sm text-slate-600">
@@ -719,7 +701,7 @@ export function CompanyMapDashboard({
             기반 보정 {createStatLabel(stats.estimatedCoordinateCompanies)}
           </div>
           {activeCompany ? (
-            <div className="absolute bottom-4 left-1/2 z-[600] max-h-[min(62vh,430px)] w-[calc(100%-32px)] max-w-md -translate-x-1/2 overflow-y-auto overscroll-contain rounded-lg border border-slate-200 bg-white/95 p-4 shadow-2xl backdrop-blur md:left-4 md:w-[380px] md:translate-x-0">
+            <div className="absolute bottom-4 left-4 z-[600] hidden max-h-[min(62vh,430px)] w-[380px] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 bg-white/95 p-4 shadow-2xl backdrop-blur md:block">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="inline-flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-900">
                   <LocateFixed
@@ -786,161 +768,318 @@ export function CompanyMapDashboard({
               </div>
             </div>
           ) : null}
+          <div className="absolute inset-x-0 bottom-0 z-[650] px-3 pb-3 md:hidden">
+            <div
+              className={[
+                "overflow-hidden rounded-t-2xl rounded-b-xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur transition-[height] duration-200",
+                isCompanyListOpen
+                  ? "h-[56vh]"
+                  : activeCompany
+                    ? "h-24"
+                    : "h-16",
+              ].join(" ")}
+            >
+              <div className="flex h-full flex-col">
+                <button
+                  type="button"
+                  onClick={() => setIsCompanyListOpen((current) => !current)}
+                  aria-expanded={isCompanyListOpen}
+                  aria-label={isCompanyListOpen ? "기업 목록 접기" : "기업 목록 펼치기"}
+                  className="grid gap-1 border-b border-slate-200 px-3 py-2 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <span className="mx-auto h-1.5 w-10 rounded-full bg-slate-300" />
+                  <span className="inline-flex items-center justify-between gap-3">
+                    <span className="inline-flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-950">
+                      <List
+                        className="size-4 shrink-0 text-slate-500"
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 truncate">업종별 기업 목록</span>
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="shrink-0 text-xs text-slate-500">
+                        {activeCategory ?? "전체 업종"} ·{" "}
+                        {formatNumber(visibleCompanyList.length)}개
+                      </span>
+                      {isCompanyListOpen ? (
+                        <ChevronDown
+                          className="size-4 shrink-0 text-slate-500"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <ChevronUp
+                          className="size-4 shrink-0 text-slate-500"
+                          aria-hidden="true"
+                        />
+                      )}
+                    </span>
+                  </span>
+                </button>
+                {activeCompany ? (
+                  <div className="border-b border-slate-200 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="line-clamp-1 text-xs font-semibold text-slate-900">
+                        {activeCompany.name || "기업명 미등록"}
+                      </span>
+                      <Link
+                        href={`/companies/${activeCompany.id}`}
+                        className="shrink-0 rounded border border-slate-300 px-2 py-0.5 text-[11px] font-semibold text-slate-700"
+                      >
+                        상세
+                      </Link>
+                    </div>
+                    <p className="mt-1 line-clamp-1 text-[11px] text-slate-500">
+                      {activeCompany.mainProduct ||
+                        getCompanyIndustryLabel(activeCompany)}
+                    </p>
+                  </div>
+                ) : null}
+                {isCompanyListOpen ? (
+                  <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                    {visibleCompanyList.length > 0 ? (
+                      <ul className="grid gap-2">
+                        {visibleCompanyList.map((company) => {
+                          const selected = activeCompanyId === company.id;
+
+                          return (
+                            <li key={company.id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  focusCompanyOnMap(company);
+                                  setIsCompanyListOpen(false);
+                                }}
+                                className={[
+                                  "grid w-full gap-1 rounded-md border px-3 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-primary/20",
+                                  selected
+                                    ? "border-primary bg-primary/10"
+                                    : "border-slate-200 bg-white hover:border-primary/40 hover:bg-slate-50",
+                                ].join(" ")}
+                              >
+                                <span className="line-clamp-1 text-sm font-semibold text-slate-950">
+                                  {company.name || "기업명 미등록"}
+                                </span>
+                                <span className="line-clamp-1 text-xs text-slate-600">
+                                  {company.mainProduct ||
+                                    getCompanyIndustryLabel(company)}
+                                </span>
+                                <span className="line-clamp-1 text-xs text-slate-400">
+                                  {company.region || "-"} ·{" "}
+                                  {getCompanyIndustryLabel(company)}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <div className="grid h-full place-items-center px-4 text-center text-sm text-slate-500">
+                        선택한 조건에 해당하는 기업이 없습니다.
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <aside className="grid content-start gap-4 xl:gap-3">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:p-3">
-          <label
-            htmlFor="company-map-search"
-            className="text-sm font-semibold text-slate-800"
-          >
-            기업명·품목 검색
-          </label>
-          <div className="mt-2 flex min-w-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
-            <Search
-              className="size-4 shrink-0 text-slate-400"
-              aria-hidden="true"
-            />
-            <input
-              id="company-map-search"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setActiveCompanyId(null);
-              }}
-              placeholder="기업명, 주소, 주요품목"
-              className="h-11 min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-            />
-            {query ? (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="검색어 지우기"
-                className="inline-flex size-7 items-center justify-center rounded text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-              >
-                <X className="size-4" aria-hidden="true" />
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:p-3">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
-              <MapPin className="size-4 text-slate-500" aria-hidden="true" />
-              지역
-            </h2>
-            <span className="text-xs text-slate-500">
-              {activeRegion ?? "전체"}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
+      <aside
+        className={[
+          "fixed inset-0 z-[2000] xl:static xl:z-auto",
+          isSidebarOpen
+            ? "pointer-events-auto"
+            : "pointer-events-none xl:pointer-events-auto",
+        ].join(" ")}
+      >
+        <button
+          type="button"
+          aria-label="필터 메뉴 닫기"
+          onClick={() => setIsSidebarOpen(false)}
+          className={[
+            "absolute inset-0 bg-slate-900/35 transition-opacity xl:hidden",
+            isSidebarOpen ? "opacity-100" : "opacity-0",
+          ].join(" ")}
+        />
+        <div
+          className={[
+            "absolute inset-y-0 right-0 z-[2010] w-[min(92vw,380px)] overflow-y-auto bg-slate-50 p-4 shadow-2xl transition-transform duration-200 xl:static xl:w-auto xl:translate-x-0 xl:overflow-visible xl:bg-transparent xl:p-0 xl:shadow-none",
+            isSidebarOpen
+              ? "translate-x-0"
+              : "translate-x-full xl:translate-x-0",
+          ].join(" ")}
+        >
+          <div className="mb-3 flex items-center justify-between xl:hidden">
+            <h2 className="text-sm font-semibold text-slate-900">필터 메뉴</h2>
             <button
               type="button"
-              onClick={() => {
-                setActiveRegion(null);
-                setActiveCompanyId(null);
-              }}
-              aria-pressed={!activeRegion}
-              className={[
-                "h-10 rounded-md border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-primary/20",
-                !activeRegion
-                  ? "border-primary bg-primary text-white"
-                  : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:text-primary",
-              ].join(" ")}
+              onClick={() => setIsSidebarOpen(false)}
+              className="inline-flex size-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/20"
+              aria-label="필터 메뉴 닫기"
             >
-              전체
+              <X className="size-4" aria-hidden="true" />
             </button>
-            {stats.regionCounts.map((region) => {
-              const selected = activeRegion === region.value;
-
-              return (
-                <button
-                  key={region.value}
-                  type="button"
-                  onClick={() => {
-                    setActiveRegion(selected ? null : region.value);
+          </div>
+          <div className="grid content-start gap-4 xl:gap-3">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:p-3">
+              <label
+                htmlFor="company-map-search"
+                className="text-sm font-semibold text-slate-800"
+              >
+                기업명·품목 검색
+              </label>
+              <div className="mt-2 flex min-w-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+                <Search
+                  className="size-4 shrink-0 text-slate-400"
+                  aria-hidden="true"
+                />
+                <input
+                  id="company-map-search"
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
                     setActiveCompanyId(null);
                   }}
-                  aria-pressed={selected}
+                  placeholder="기업명, 주소, 주요품목"
+                  className="h-11 min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                />
+                {query ? (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    aria-label="검색어 지우기"
+                    className="inline-flex size-7 items-center justify-center rounded text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <MapPin
+                    className="size-4 text-slate-500"
+                    aria-hidden="true"
+                  />
+                  지역
+                </h2>
+                <span className="text-xs text-slate-500">
+                  {activeRegion ?? "전체"}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveRegion(null);
+                    setActiveCompanyId(null);
+                  }}
+                  aria-pressed={!activeRegion}
                   className={[
-                    "flex h-10 items-center justify-between gap-2 rounded-md border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-primary/20",
-                    selected
+                    "h-10 rounded-md border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-primary/20",
+                    !activeRegion
                       ? "border-primary bg-primary text-white"
                       : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:text-primary",
                   ].join(" ")}
                 >
-                  <span>{region.value}</span>
-                  <span>{formatNumber(region.count)}</span>
+                  전체
                 </button>
-              );
-            })}
-          </div>
-        </div>
+                {stats.regionCounts.map((region) => {
+                  const selected = activeRegion === region.value;
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:p-3">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
-              <List className="size-4 text-slate-500" aria-hidden="true" />
-              업종별 필터
-            </h2>
-            <span className="text-xs text-slate-500">
-              {activeCategory ?? "전체"}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveCategory(null);
-                setActiveCompanyId(null);
-              }}
-              aria-pressed={!activeCategory}
-              className={[
-                "flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-primary/20 xl:min-h-9 xl:px-2 xl:py-1.5 xl:text-xs",
-                !activeCategory
-                  ? "border-primary bg-primary text-white"
-                  : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:text-primary",
-              ].join(" ")}
-            >
-              <span>전체 업종</span>
-              <span>{formatNumber(stats.totalCompanies)}</span>
-            </button>
-            {stats.categoryCounts.map((category) => {
-              const selected = activeCategory === category.value;
-              const swatch = getCategoryColor(category.value);
+                  return (
+                    <button
+                      key={region.value}
+                      type="button"
+                      onClick={() => {
+                        setActiveRegion(selected ? null : region.value);
+                        setActiveCompanyId(null);
+                      }}
+                      aria-pressed={selected}
+                      className={[
+                        "flex h-10 items-center justify-between gap-2 rounded-md border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-primary/20",
+                        selected
+                          ? "border-primary bg-primary text-white"
+                          : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:text-primary",
+                      ].join(" ")}
+                    >
+                      <span>{region.value}</span>
+                      <span>{formatNumber(region.count)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-              return (
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <List className="size-4 text-slate-500" aria-hidden="true" />
+                  업종별 필터
+                </h2>
+                <span className="text-xs text-slate-500">
+                  {activeCategory ?? "전체"}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <button
-                  key={category.value}
                   type="button"
                   onClick={() => {
-                    setActiveCategory(selected ? null : category.value);
+                    setActiveCategory(null);
                     setActiveCompanyId(null);
                   }}
-                  aria-pressed={selected}
+                  aria-pressed={!activeCategory}
                   className={[
-                    "flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-primary/20 xl:min-h-9 xl:px-2 xl:py-1.5 xl:text-xs",
-                    selected
-                      ? getCategoryTone(category.value)
-                      : "border-slate-300 bg-white text-slate-700 hover:border-slate-400",
+                    "flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-primary/20 xl:min-h-9 xl:px-2 xl:py-1.5 xl:text-xs",
+                    !activeCategory
+                      ? "border-primary bg-primary text-white"
+                      : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:text-primary",
                   ].join(" ")}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      className="size-3 shrink-0 rounded-sm"
-                      style={{ backgroundColor: swatch }}
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 truncate">{category.value}</span>
-                  </span>
-                  <span className="shrink-0">
-                    {formatNumber(category.count)}
-                  </span>
+                  <span>전체 업종</span>
+                  <span>{formatNumber(categoryCountBasePoints.length)}</span>
                 </button>
-              );
-            })}
+                {categoryCounts.map((category) => {
+                  const selected = activeCategory === category.value;
+                  const swatch = getCategoryColor(category.value);
+
+                  return (
+                    <button
+                      key={category.value}
+                      type="button"
+                      onClick={() => {
+                        setActiveCategory(selected ? null : category.value);
+                        setActiveCompanyId(null);
+                      }}
+                      aria-pressed={selected}
+                      className={[
+                        "flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-primary/20 xl:min-h-9 xl:px-2 xl:py-1.5 xl:text-xs",
+                        selected
+                          ? getCategoryTone(category.value)
+                          : "border-slate-300 bg-white text-slate-700 hover:border-slate-400",
+                      ].join(" ")}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span
+                          className="size-3 shrink-0 rounded-sm"
+                          style={{ backgroundColor: swatch }}
+                          aria-hidden="true"
+                        />
+                        <span className="min-w-0 truncate">
+                          {category.value}
+                        </span>
+                      </span>
+                      <span className="shrink-0">
+                        {formatNumber(category.count)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </aside>

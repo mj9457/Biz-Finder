@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CompanyBackButton } from "@/features/companies/components/company-back-button";
 import { CompanyDetail } from "@/features/companies/components/company-detail";
 import { getCompanyById } from "@/features/companies/lib/queries";
 
@@ -42,12 +42,7 @@ export default async function CompanyDetailPage({
   return (
     <div className="mx-auto grid w-full max-w-7xl gap-5 px-5 py-6 sm:px-8">
       <div>
-        <Link
-          href="/companies"
-          className="inline-flex h-10 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-        >
-          목록으로
-        </Link>
+        <CompanyBackButton />
       </div>
       <CompanyDetail company={company} />
     </div>

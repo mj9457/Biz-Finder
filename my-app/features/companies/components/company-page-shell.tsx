@@ -46,7 +46,7 @@ export function CompanyPageShell({
       ].join(" ")}
     >
       {isMobileSidebarOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-[2000] lg:hidden">
           <button
             type="button"
             aria-label="필터 닫기"
@@ -124,33 +124,36 @@ export function CompanyPageShell({
                 지도 대시보드
               </Link>
               <dl className="grid grid-cols-3 gap-3 text-center">
-              <div className="rounded-md border border-white/60 bg-white/95 px-3 py-2">
-                <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
-                  <Building2 className="size-3.5" aria-hidden="true" />
-                  등록된 기업
-                </dt>
-                <dd className="mt-1 text-base font-semibold text-slate-950">
-                  {formatNumber(stats.totalCompanies)}
-                </dd>
-              </div>
-              <div className="rounded-md border border-white/60 bg-white/95 px-3 py-2">
-                <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
-                  <MapPin className="size-3.5" aria-hidden="true" />
-                  지역
-                </dt>
-                <dd className="mt-1 text-base font-semibold text-slate-950">
-                  {formatNumber(stats.totalRegions)}
-                </dd>
-              </div>
-              <div className="rounded-md border border-white/60 bg-white/95 px-3 py-2">
-                <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
-                  <BriefcaseBusiness className="size-3.5" aria-hidden="true" />
-                  업종
-                </dt>
-                <dd className="mt-1 text-base font-semibold text-slate-950">
-                  {formatNumber(stats.totalCategories)}
-                </dd>
-              </div>
+                <div className="rounded-md border border-white/60 bg-white/95 px-3 py-2">
+                  <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
+                    <Building2 className="size-3.5" aria-hidden="true" />
+                    회원사
+                  </dt>
+                  <dd className="mt-1 text-base font-semibold text-slate-950">
+                    {formatNumber(stats.totalCompanies)}
+                  </dd>
+                </div>
+                <div className="rounded-md border border-white/60 bg-white/95 px-3 py-2">
+                  <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
+                    <MapPin className="size-3.5" aria-hidden="true" />
+                    지역
+                  </dt>
+                  <dd className="mt-1 text-base font-semibold text-slate-950">
+                    {formatNumber(stats.totalRegions)}
+                  </dd>
+                </div>
+                <div className="rounded-md border border-white/60 bg-white/95 px-3 py-2">
+                  <dt className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500">
+                    <BriefcaseBusiness
+                      className="size-3.5"
+                      aria-hidden="true"
+                    />
+                    업종
+                  </dt>
+                  <dd className="mt-1 text-base font-semibold text-slate-950">
+                    {formatNumber(stats.totalCategories)}
+                  </dd>
+                </div>
               </dl>
             </div>
           </div>
