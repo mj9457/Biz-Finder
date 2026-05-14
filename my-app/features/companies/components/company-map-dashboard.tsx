@@ -8,7 +8,7 @@ import {
   ChevronUp,
   List,
   LocateFixed,
-  Menu,
+  Funnel,
   MapPin,
   RefreshCw,
   RotateCcw,
@@ -272,16 +272,7 @@ export function CompanyMapDashboard({
       count: counts.get(category.value) ?? 0,
     }));
   }, [categoryCountBasePoints, stats.categoryCounts]);
-  const mapPoints = useMemo(() => {
-    if (!activeCompanyId) {
-      return filteredPoints;
-    }
-
-    const selected = filteredPoints.find(
-      (point) => point.id === activeCompanyId,
-    );
-    return selected ? [selected] : filteredPoints;
-  }, [activeCompanyId, filteredPoints]);
+  const mapPoints = useMemo(() => filteredPoints, [filteredPoints]);
   const activeCompany = useMemo(
     () =>
       activeCompanyId
@@ -486,6 +477,7 @@ export function CompanyMapDashboard({
       marker.bindPopup(buildPopupHtml(point), {
         closeButton: true,
         minWidth: 220,
+        autoPan: false,
       });
       marker.on("focus click popupopen", () => setActiveCompanyId(point.id));
       clusterLayer.addLayer(marker);
@@ -494,8 +486,18 @@ export function CompanyMapDashboard({
     map.addLayer(clusterLayer);
     clusterLayerRef.current = clusterLayer;
 
-    fitMapToPoints(L, map, mapPoints);
   }, [activeCompanyId, activeRegion, isMapReady, mapPoints, mapRenderNonce]);
+
+  useEffect(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+
+    if (!isMapReady || !L || !map) {
+      return;
+    }
+
+    fitMapToPoints(L, map, mapPoints);
+  }, [isMapReady, mapPoints, mapRenderNonce]);
 
   function resetFilters() {
     setActiveRegion(null);
@@ -545,15 +547,14 @@ export function CompanyMapDashboard({
             <h1 className="truncate text-base font-semibold text-slate-950">
               회원사 지도
             </h1>
-            <p className="text-xs text-slate-500">필터 메뉴로 빠르게 검색</p>
           </div>
           <button
             type="button"
             onClick={() => setIsSidebarOpen(true)}
             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
-            <Menu className="size-4" aria-hidden="true" />
-            메뉴
+            <Funnel className="size-4" aria-hidden="true" />
+            필터
           </button>
         </div>
         <div className="hidden min-w-0 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 xl:flex">
@@ -586,7 +587,7 @@ export function CompanyMapDashboard({
             ) : null}
           </div>
         </div>
-        <div className="relative h-[62vh] min-h-[380px] sm:h-[68vh] xl:h-[calc(100vh-230px)]">
+        <div className="relative h-[100vh] min-h-[380px] sm:h-[68vh] xl:h-[calc(100vh-230px)]">
           <div ref={mapElementRef} className="h-full w-full" />
           {!isMapReady ? (
             <div className="absolute inset-0 z-[500] grid place-items-center bg-white/80 text-sm font-semibold text-slate-700">
@@ -768,10 +769,10 @@ export function CompanyMapDashboard({
               </div>
             </div>
           ) : null}
-          <div className="absolute inset-x-0 bottom-0 z-[650] px-3 pb-3 md:hidden">
+          <div className="fixed inset-x-0 bottom-0 z-[650] md:hidden">
             <div
               className={[
-                "overflow-hidden rounded-t-2xl rounded-b-xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur transition-[height] duration-200",
+                "overflow-hidden rounded-t-2xl border border-slate-200 bg-white/95 shadow-2xl backdrop-blur transition-[height] duration-200",
                 isCompanyListOpen
                   ? "h-[56vh]"
                   : activeCompany
@@ -784,7 +785,9 @@ export function CompanyMapDashboard({
                   type="button"
                   onClick={() => setIsCompanyListOpen((current) => !current)}
                   aria-expanded={isCompanyListOpen}
-                  aria-label={isCompanyListOpen ? "기업 목록 접기" : "기업 목록 펼치기"}
+                  aria-label={
+                    isCompanyListOpen ? "기업 목록 접기" : "기업 목록 펼치기"
+                  }
                   className="grid gap-1 border-b border-slate-200 px-3 py-2 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   <span className="mx-auto h-1.5 w-10 rounded-full bg-slate-300" />

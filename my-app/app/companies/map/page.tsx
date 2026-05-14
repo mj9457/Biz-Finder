@@ -48,7 +48,7 @@ export default async function CompanyMapPage() {
           </div>
         </div>
       </header>
-      <main className="px-0 py-0 sm:px-8">
+      <main className="px-0 py-2t sm:px-8">
         <CompanyMapDashboard points={points} stats={stats} />
       </main>
     </div>
