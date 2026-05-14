@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
@@ -180,6 +181,7 @@ export default async function RootLayout({
       <body className="min-h-full bg-slate-50 text-slate-950">
         {children}
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
