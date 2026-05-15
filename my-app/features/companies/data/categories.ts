@@ -42,11 +42,9 @@ export const COMPANY_SORTS = [
 ] as const;
 
 export const COMPANY_EMPLOYEE_RANGES = [
-  { value: "lte-10", label: "10인 이하", max: 10 },
-  { value: "lte-20", label: "20인 이하", max: 20 },
-  { value: "lte-50", label: "50인 이하", max: 50 },
-  { value: "51-200", label: "51~200인", min: 51, max: 200 },
-  { value: "201-500", label: "201~500인", min: 201, max: 500 },
-  { value: "501-1000", label: "501~1000인", min: 501, max: 1000 },
-  { value: "gte-1000", label: "1000인 이상", min: 1000 },
+  { value: "lt-5", label: "5인 미만", max: 4 },
+  { value: "5-9", label: "5~9인 미만", min: 5, max: 9 },
+  { value: "10-49", label: "10~49인 미만", min: 10, max: 49 },
+  { value: "50-299", label: "50~299인 미만", min: 50, max: 299 },
+  { value: "300", label: "300인 이상", min: 300 },
 ] as const;

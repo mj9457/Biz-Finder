@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   BriefcaseBusiness,
   ChevronDown,
@@ -39,6 +38,19 @@ type CompanyFilterSidebarProps = {
   onToggleCollapsed?: () => void;
 };
 
+const CATEGORY_ORDER_INDEX = new Map(
+  COMPANY_CATEGORIES.map((category, index) => [category, index]),
+);
+
+function sortCategories(categories: CompanyCategory[]) {
+  return [...categories].toSorted((a, b) => {
+    const left = CATEGORY_ORDER_INDEX.get(a) ?? Number.MAX_SAFE_INTEGER;
+    const right = CATEGORY_ORDER_INDEX.get(b) ?? Number.MAX_SAFE_INTEGER;
+
+    return left - right || a.localeCompare(b, "ko-KR");
+  });
+}
+
 export function CompanyFilterSidebar({
   facets,
   filters,
@@ -55,7 +67,7 @@ export function CompanyFilterSidebar({
   const [selectedRegion, setSelectedRegion] = useState(filters.region);
   const [selectedCategories, setSelectedCategories] = useState<
     CompanyCategory[]
-  >(filters.categories);
+  >(() => sortCategories(filters.categories));
   const [selectedEmployeeRange, setSelectedEmployeeRange] = useState<
     CompanyEmployeeRange | ""
   >(filters.employeeRange);
@@ -84,57 +96,94 @@ export function CompanyFilterSidebar({
   const fieldsId = `${idPrefix}-fields`;
   const industryOptionsId = `${idPrefix}-industry-options`;
   const employeeOptionsId = `${idPrefix}-employee-options`;
+  const normalizedFilterCategories = useMemo(
+    () => sortCategories(filters.categories),
+    [filters.categories],
+  );
+  const hasCategoryDraftChanges =
+    selectedCategories.length !== normalizedFilterCategories.length ||
+    selectedCategories.some(
+      (category, index) => category !== normalizedFilterCategories[index],
+    );
+  const hasDraftChanges =
+    selectedRegion !== filters.region ||
+    selectedEmployeeRange !== filters.employeeRange ||
+    hasCategoryDraftChanges;
 
   const categoryCounts = useMemo(() => {
     const categoryFacets = selectedRegion
-      ? facets.categoriesByRegion[selectedRegion] ?? []
-      : facets.categories;
+      ? selectedEmployeeRange
+        ? facets.categoriesByRegionAndEmployeeRange[selectedRegion]?.[
+            selectedEmployeeRange
+          ] ?? []
+        : facets.categoriesByRegion[selectedRegion] ?? []
+      : selectedEmployeeRange
+        ? facets.categoriesByEmployeeRange[selectedEmployeeRange] ?? []
+        : facets.categories;
 
     return new Map(categoryFacets.map((facet) => [facet.value, facet.count]));
-  }, [facets.categories, facets.categoriesByRegion, selectedRegion]);
+  }, [
+    facets.categories,
+    facets.categoriesByEmployeeRange,
+    facets.categoriesByRegion,
+    facets.categoriesByRegionAndEmployeeRange,
+    selectedEmployeeRange,
+    selectedRegion,
+  ]);
 
-  function applyFilters(
-    nextRegion: CompanyRegion | "",
-    nextCategories: CompanyCategory[],
-    nextEmployeeRange: CompanyEmployeeRange | "",
-  ) {
+  function updateRegion(nextRegion: CompanyRegion | "") {
+    if (nextRegion === selectedRegion) {
+      return;
+    }
+
+    setSelectedRegion(nextRegion);
+  }
+
+  function toggleCategory(category: CompanyCategory) {
+    const nextCategories = sortCategories(
+      selectedCategories.includes(category)
+        ? selectedCategories.filter((value) => value !== category)
+        : [...selectedCategories, category],
+    );
+
+    setSelectedCategories(nextCategories);
+  }
+
+  function resetCategories() {
+    setSelectedCategories([]);
+  }
+
+  function updateEmployeeRange(nextEmployeeRange: CompanyEmployeeRange | "") {
+    if (nextEmployeeRange === selectedEmployeeRange) {
+      return;
+    }
+
+    setSelectedEmployeeRange(nextEmployeeRange);
+  }
+
+  function resetDraftFilters() {
+    setSelectedRegion("");
+    setSelectedCategories([]);
+    setSelectedEmployeeRange("");
+  }
+
+  function applyDraftFilters() {
+    if (!hasDraftChanges) {
+      return;
+    }
+
     const href = createCompanySearchHref(filters, {
-      region: nextRegion,
-      categories: nextCategories,
-      employeeRange: nextEmployeeRange,
+      region: selectedRegion,
+      categories: selectedCategories,
+      employeeRange: selectedEmployeeRange,
       page: 1,
     });
 
     startTransition(() => {
       router.replace(href, { scroll: false });
+      onClose?.();
     });
   }
-
-  function updateRegion(nextRegion: CompanyRegion | "") {
-    setSelectedRegion(nextRegion);
-    applyFilters(nextRegion, selectedCategories, selectedEmployeeRange);
-  }
-
-  function toggleCategory(category: CompanyCategory) {
-    const nextCategories = selectedCategories.includes(category)
-      ? selectedCategories.filter((value) => value !== category)
-      : [...selectedCategories, category];
-
-    setSelectedCategories(nextCategories);
-    applyFilters(selectedRegion, nextCategories, selectedEmployeeRange);
-  }
-
-  function updateEmployeeRange(nextEmployeeRange: CompanyEmployeeRange | "") {
-    setSelectedEmployeeRange(nextEmployeeRange);
-    applyFilters(selectedRegion, selectedCategories, nextEmployeeRange);
-  }
-
-  const resetHref = createCompanySearchHref(filters, {
-    region: "",
-    categories: [],
-    employeeRange: "",
-    page: 1,
-  });
 
   return (
     <aside
@@ -270,6 +319,19 @@ export function CompanyFilterSidebar({
               isIndustryFilterOpen ? "" : "hidden",
             ].join(" ")}
           >
+            <button
+              type="button"
+              aria-pressed={selectedCategories.length === 0}
+              onClick={resetCategories}
+              className={[
+                "flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm transition",
+                selectedCategories.length === 0
+                  ? "border-primary bg-primary text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:text-primary",
+              ].join(" ")}
+            >
+              <span className="min-w-0 truncate">전체</span>
+            </button>
             {COMPANY_CATEGORIES.map((category) => {
               const checked = selectedSet.has(category);
 
@@ -370,14 +432,23 @@ export function CompanyFilterSidebar({
           </div>
         </div>
 
-        <div className="flex justify-end">
-          <Link
-            href={resetHref}
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={resetDraftFilters}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             <RotateCcw className="size-4" aria-hidden="true" />
             <span>필터 초기화</span>
-          </Link>
+          </button>
+          <button
+            type="button"
+            onClick={applyDraftFilters}
+            disabled={!hasDraftChanges || isPending}
+            className="inline-flex h-10 items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPending ? "적용 중..." : "확인"}
+          </button>
         </div>
       </div>
     </aside>

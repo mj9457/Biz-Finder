@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import {
@@ -485,7 +485,6 @@ export function CompanyMapDashboard({
 
     map.addLayer(clusterLayer);
     clusterLayerRef.current = clusterLayer;
-
   }, [activeCompanyId, activeRegion, isMapReady, mapPoints, mapRenderNonce]);
 
   useEffect(() => {
@@ -746,9 +745,7 @@ export function CompanyMapDashboard({
                       주소
                     </dt>
                     <dd className="text-slate-600">
-                      {[activeCompany.region, activeCompany.address]
-                        .filter(Boolean)
-                        .join(" · ") || "-"}
+                      {activeCompany.address || "-"}
                     </dd>
                   </div>
                   <div className="grid gap-1">

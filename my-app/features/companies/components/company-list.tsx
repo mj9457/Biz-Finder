@@ -12,6 +12,7 @@ import {
   createCompanySearchHref,
   hasActiveCompanyFilters,
 } from "../lib/search-params";
+import { formatNumber } from "@/lib/format";
 import type { CompanySearchFilters, CompanySearchResult } from "../types";
 import { CompanyCardList } from "./company-card-list";
 import { CompanyCsvDownload } from "./company-csv-download";
@@ -89,6 +90,15 @@ export function CompanyList({ result, filters }: CompanyListProps) {
           <CompanyCsvDownload filters={filters} />
           <CompanyViewToggle filters={filters} />
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <p className="text-sm text-slate-700">
+          현재 필터 조건에 맞는 기업 수
+        </p>
+        <strong className="text-base font-semibold text-slate-950">
+          총 {formatNumber(result.total)}개
+        </strong>
       </div>
 
       {result.total === 0 ? (

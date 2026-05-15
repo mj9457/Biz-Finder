@@ -77,6 +77,15 @@ export type CompanyFacets = {
   industries: CompanyFacetOption[];
   categories: CompanyFacetOption[];
   categoriesByRegion: Partial<Record<CompanyRegion, CompanyFacetOption[]>>;
+  categoriesByEmployeeRange: Partial<
+    Record<CompanyEmployeeRange, CompanyFacetOption[]>
+  >;
+  categoriesByRegionAndEmployeeRange: Partial<
+    Record<
+      CompanyRegion,
+      Partial<Record<CompanyEmployeeRange, CompanyFacetOption[]>>
+    >
+  >;
 };
 
 export type CompanySearchResult = {
