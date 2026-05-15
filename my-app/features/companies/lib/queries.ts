@@ -58,15 +58,8 @@ type CompanyFacetRow = Pick<
   | "employee_count"
 >;
 
-type CompanyDirectoryStats = {
-  totalCompanies: number;
-  totalRegions: number;
-  totalCategories: number;
-};
-
 type CompanyDirectoryMetadata = {
   facets: CompanyFacets;
-  stats: CompanyDirectoryStats;
 };
 
 const COMPANY_CACHE_REVALIDATE_SECONDS = 300;
@@ -116,19 +109,15 @@ const employeeRangeMap = new Map(
   COMPANY_EMPLOYEE_RANGES.map((range) => [range.value, range]),
 );
 
-let directoryMetadataCache:
-  | {
-      data: CompanyDirectoryMetadata;
-      expiresAt: number;
-    }
-  | null = null;
+let directoryMetadataCache: {
+  data: CompanyDirectoryMetadata;
+  expiresAt: number;
+} | null = null;
 let directoryMetadataPromise: Promise<CompanyDirectoryMetadata> | null = null;
-let companiesForMapCache:
-  | {
-      data: Company[];
-      expiresAt: number;
-    }
-  | null = null;
+let companiesForMapCache: {
+  data: Company[];
+  expiresAt: number;
+} | null = null;
 let companiesForMapPromise: Promise<Company[]> | null = null;
 
 type ChainedQuery<T> = {
@@ -243,7 +232,11 @@ function normalizeCategoriesFromSource(row: CompanyFacetRow) {
   if (source.includes("부동산") || source.includes("임대")) {
     return ["부동산 & 임대"];
   }
-  if (source.includes("운수") || source.includes("물류") || source.includes("창고")) {
+  if (
+    source.includes("운수") ||
+    source.includes("물류") ||
+    source.includes("창고")
+  ) {
     return ["운수"];
   }
   if (source.includes("숙박") || source.includes("음식점")) {
@@ -257,7 +250,8 @@ function normalizeCategoriesFromSource(row: CompanyFacetRow) {
     return ["환경"];
   }
   if (source.includes("광업")) return ["광"];
-  if (source.includes("금융") || source.includes("보험")) return ["금융 & 보험"];
+  if (source.includes("금융") || source.includes("보험"))
+    return ["금융 & 보험"];
   if (
     source.includes("방송") ||
     source.includes("통신") ||
@@ -289,7 +283,9 @@ function normalizeCategoriesFromSource(row: CompanyFacetRow) {
   return source ? ["기타"] : [];
 }
 
-function normalizeRegionValue(row: Pick<CompanyRow, "region" | "location" | "address">) {
+function normalizeRegionValue(
+  row: Pick<CompanyRow, "region" | "location" | "address">,
+) {
   const region = row.region?.trim();
 
   if (region && companyRegionSet.has(region)) {
@@ -361,7 +357,10 @@ function sanitizeKeyword(value: string) {
   return value.trim().replace(/,/g, " ");
 }
 
-function applyKeywordFilter<T extends ChainedQuery<T>>(query: T, keyword: string): T {
+function applyKeywordFilter<T extends ChainedQuery<T>>(
+  query: T,
+  keyword: string,
+): T {
   if (!keyword) {
     return query;
   }
@@ -610,7 +609,9 @@ function countCategories(
 }
 
 function createCompanyFacets(rows: CompanyFacetRow[]): CompanyFacets {
-  const normalizedRegions = rows.map((row) => normalizeRegionValue(row)).filter(Boolean);
+  const normalizedRegions = rows
+    .map((row) => normalizeRegionValue(row))
+    .filter(Boolean);
   const categoriesByRegion = Object.fromEntries(
     COMPANY_REGIONS.map((region) => [region, countCategories(rows, region)]),
   ) as Partial<Record<(typeof COMPANY_REGIONS)[number], CompanyFacetOption[]>>;
@@ -637,15 +638,17 @@ function createCompanyFacets(rows: CompanyFacetRow[]): CompanyFacets {
     >
   >;
   const industries = countBy(
-    rows.map((row) => {
-      return (
-        row.standard_industry ??
-        row.industry_chamber ??
-        row.industry_code ??
-        row.company_type ??
-        ""
-      ).trim();
-    }).filter(Boolean),
+    rows
+      .map((row) => {
+        return (
+          row.standard_industry ??
+          row.industry_chamber ??
+          row.industry_code ??
+          row.company_type ??
+          ""
+        ).trim();
+      })
+      .filter(Boolean),
   );
 
   return {
@@ -658,18 +661,6 @@ function createCompanyFacets(rows: CompanyFacetRow[]): CompanyFacets {
   };
 }
 
-function createCompanyDirectoryStats(rows: CompanyFacetRow[]): CompanyDirectoryStats {
-  return {
-    totalCompanies: rows.length,
-    totalRegions: new Set(
-      rows
-        .map((row) => normalizeRegionValue(row))
-        .filter((value): value is string => Boolean(value)),
-    ).size,
-    totalCategories: COMPANY_CATEGORIES.length,
-  };
-}
-
 async function loadCompanyDirectoryMetadata() {
   const rows = await fetchAllRowsWithColumns<CompanyFacetRow>(
     COMPANY_FACET_SELECT_COLUMNS,
@@ -677,7 +668,6 @@ async function loadCompanyDirectoryMetadata() {
 
   return {
     facets: createCompanyFacets(rows),
-    stats: createCompanyDirectoryStats(rows),
   };
 }
 
@@ -705,7 +695,9 @@ async function getCompanyDirectoryMetadata(): Promise<CompanyDirectoryMetadata> 
 }
 
 async function loadCompaniesForMap() {
-  const rows = await fetchAllRowsWithColumns<CompanyRow>(COMPANY_SELECT_COLUMNS);
+  const rows = await fetchAllRowsWithColumns<CompanyRow>(
+    COMPANY_SELECT_COLUMNS,
+  );
   return rows.map(mapCompany);
 }
 
@@ -755,7 +747,12 @@ async function createCompanySearchResult(
     };
   }
 
-  const correctedPage = await fetchSearchPage(filters, page, filters.pageSize, false);
+  const correctedPage = await fetchSearchPage(
+    filters,
+    page,
+    filters.pageSize,
+    false,
+  );
 
   return {
     items: correctedPage.rows,
@@ -772,35 +769,43 @@ export const searchCompanies = cache(
   },
 );
 
-export const getCompanyPageData = cache(async (filters: CompanySearchFilters) => {
-  const metadata = await getCompanyDirectoryMetadata();
-  const result = await createCompanySearchResult(filters);
+export const getCompanyPageData = cache(
+  async (filters: CompanySearchFilters) => {
+    const metadata = await getCompanyDirectoryMetadata();
+    const result = await createCompanySearchResult(filters);
 
-  return {
-    facets: metadata.facets,
-    result,
-    stats: metadata.stats,
-  };
-});
+    return {
+      facets: metadata.facets,
+      result,
+    };
+  },
+);
 
-export const getCompaniesForExport = cache(async (filters: CompanySearchFilters) => {
-  const firstPage = await fetchSearchPage(filters, 1, SUPABASE_BATCH_SIZE, true);
-  const total = firstPage.total ?? firstPage.rows.length;
-  const pages = Math.max(1, Math.ceil(total / SUPABASE_BATCH_SIZE));
-  const items = [...firstPage.rows];
-
-  for (let currentPage = 2; currentPage <= pages; currentPage += 1) {
-    const page = await fetchSearchPage(
+export const getCompaniesForExport = cache(
+  async (filters: CompanySearchFilters) => {
+    const firstPage = await fetchSearchPage(
       filters,
-      currentPage,
+      1,
       SUPABASE_BATCH_SIZE,
-      false,
+      true,
     );
-    items.push(...page.rows);
-  }
+    const total = firstPage.total ?? firstPage.rows.length;
+    const pages = Math.max(1, Math.ceil(total / SUPABASE_BATCH_SIZE));
+    const items = [...firstPage.rows];
 
-  return items;
-});
+    for (let currentPage = 2; currentPage <= pages; currentPage += 1) {
+      const page = await fetchSearchPage(
+        filters,
+        currentPage,
+        SUPABASE_BATCH_SIZE,
+        false,
+      );
+      items.push(...page.rows);
+    }
+
+    return items;
+  },
+);
 
 export const getCompaniesForMap = cache(async () => getAllCompaniesForMap());
 
@@ -830,8 +835,4 @@ export const getCompanyById = cache(async (id: string) => {
 
 export const getCompanyFacets = cache(async (): Promise<CompanyFacets> => {
   return (await getCompanyDirectoryMetadata()).facets;
-});
-
-export const getCompanyDirectoryStats = cache(async () => {
-  return (await getCompanyDirectoryMetadata()).stats;
 });

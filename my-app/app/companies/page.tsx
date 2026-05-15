@@ -22,10 +22,10 @@ export default async function CompaniesPage({
   searchParams,
 }: CompaniesPageProps) {
   const filters = parseCompanySearchParams(await searchParams);
-  const { facets, result, stats } = await getCompanyPageData(filters);
+  const { facets, result } = await getCompanyPageData(filters);
 
   return (
-    <CompanyPageShell filters={filters} facets={facets} stats={stats}>
+    <CompanyPageShell filters={filters} facets={facets}>
       <div className="min-w-0 px-5 py-6 sm:px-8">
         <div className="mx-auto w-full">
           <CompanyList result={result} filters={filters} />

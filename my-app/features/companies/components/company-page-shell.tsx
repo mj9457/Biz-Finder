@@ -4,9 +4,8 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { BriefcaseBusiness, Building2, MapPin, Menu } from "lucide-react";
+import { MapPin, Menu } from "lucide-react";
 
-import { formatNumber } from "@/lib/format";
 import type { CompanyFacets, CompanySearchFilters } from "../types";
 import { CompanyFilterSidebar } from "./company-filter-sidebar";
 
