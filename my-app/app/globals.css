@@ -200,3 +200,85 @@ body {
   font-weight: 700;
   text-decoration: none;
 }
+
+.bf-kakao-overlay {
+  position: relative;
+  bottom: 60px;
+  right: 5px;
+  width: max-content;
+  max-width: min(84vw, 320px);
+}
+
+.bf-kakao-overlay__card {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid rgb(203 213 225);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.98);
+  box-shadow: 0 10px 24px rgb(15 23 42 / 0.24);
+  padding: 8px 10px;
+}
+
+.bf-kakao-overlay__card::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-right: 1px solid rgb(203 213 225);
+  border-bottom: 1px solid rgb(203 213 225);
+  background: rgb(255 255 255 / 0.98);
+  transform: rotate(45deg);
+}
+
+.bf-kakao-overlay__title {
+  color: #0f172a;
+  white-space: normal;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.bf-kakao-overlay__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  padding: 2px 7px;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.bf-kakao-overlay__meta {
+  margin: 1px 0 0;
+  color: #334155;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.bf-kakao-overlay__address {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.bf-kakao-overlay__link {
+  display: inline-flex;
+  margin-top: 8px;
+  align-items: center;
+  border-radius: 6px;
+  background: var(--primary);
+  padding: 4px 10px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}

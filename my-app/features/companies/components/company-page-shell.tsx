@@ -110,7 +110,7 @@ export function CompanyPageShell({
             </div>
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
               <Link
-                href="/companies/map"
+                href="/companies/kakaomap"
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <MapPin className="size-4" aria-hidden="true" />
