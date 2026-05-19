@@ -2,46 +2,166 @@
 
 import Link from "next/link";
 import {
+  BriefcaseBusiness,
+  Building2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Factory,
   List,
+  Leaf,
+  Landmark,
   LocateFixed,
   Funnel,
+  Hammer,
   MapPin,
   RefreshCw,
   RotateCcw,
   Search,
+  Store,
+  Truck,
   X,
+  Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  LayerGroup,
-  Map as LeafletMap,
-  MarkerClusterGroup,
-} from "leaflet";
-import type { GeoJsonObject } from "geojson";
+import {
+  startTransition,
+  type SetStateAction,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { formatNumber } from "@/lib/format";
-import { REGION_BOUNDARIES } from "../data/map-region-boundaries";
 import type { CompanyMapPoint, CompanyMapStats } from "../types";
 
-type CompanyMapDashboardProps = {
+type CompanyKakaoMapDashboardProps = {
   points: CompanyMapPoint[];
   stats: CompanyMapStats;
 };
 
-type LeafletNamespace = typeof import("leaflet");
-
-const MAP_CENTER: [number, number] = [37.6906, 127.2817];
-const DEFAULT_ZOOM = 10;
-
-const REGION_OUTLINE_COLORS: Record<string, string> = {
-  남양주: "#0ea5e9",
-  구리: "#22c55e",
-  가평: "#f59e0b",
+type KakaoLatLng = {
+  getLat: () => number;
+  getLng: () => number;
 };
+
+type KakaoLatLngBounds = {
+  extend: (latLng: KakaoLatLng) => void;
+  getSouthWest: () => KakaoLatLng;
+  getNorthEast: () => KakaoLatLng;
+};
+
+type KakaoMapInstance = {
+  getBounds: () => KakaoLatLngBounds;
+  setCenter: (latLng: KakaoLatLng) => void;
+  setLevel: (level: number) => void;
+  getLevel: () => number;
+  setBounds: (bounds: KakaoLatLngBounds) => void;
+  relayout: () => void;
+};
+
+type KakaoMarkerInstance = {
+  setMap: (map: KakaoMapInstance | null) => void;
+  setImage: (image: unknown) => void;
+};
+
+type KakaoCustomOverlayInstance = {
+  setMap: (map: KakaoMapInstance | null) => void;
+};
+
+type KakaoMarkerClustererInstance = {
+  addMarkers: (markers: KakaoMarkerInstance[]) => void;
+  clear?: () => void;
+  setMap?: (map: KakaoMapInstance | null) => void;
+};
+
+type KakaoGeocoderInstance = {
+  addressSearch: (
+    address: string,
+    callback: (result: Array<{ x: string; y: string }>, status: string) => void,
+  ) => void;
+};
+
+type KakaoMapsInstance = {
+  load: (callback: () => void) => void;
+  Map: new (
+    container: HTMLElement,
+    options: { center: KakaoLatLng; level: number },
+  ) => KakaoMapInstance;
+  LatLng: new (lat: number, lng: number) => KakaoLatLng;
+  LatLngBounds: new () => KakaoLatLngBounds;
+  Point: new (x: number, y: number) => unknown;
+  Size: new (width: number, height: number) => unknown;
+  MarkerImage: new (
+    src: string,
+    size: unknown,
+    options?: { offset?: unknown },
+  ) => unknown;
+  Marker: new (options: {
+    position: KakaoLatLng;
+    title?: string;
+    image?: unknown;
+  }) => KakaoMarkerInstance;
+  CustomOverlay: new (options: {
+    content: string | HTMLElement;
+    position: KakaoLatLng;
+    yAnchor?: number;
+    zIndex?: number;
+  }) => KakaoCustomOverlayInstance;
+  MarkerClusterer: new (
+    options: Record<string, unknown>,
+  ) => KakaoMarkerClustererInstance;
+  services: {
+    Geocoder: new () => KakaoGeocoderInstance;
+    Status: { OK: string };
+  };
+  event: {
+    addListener: (target: object, type: string, handler: () => void) => void;
+  };
+};
+
+type KakaoWindow = Window & {
+  kakao?: { maps: KakaoMapsInstance };
+  __bfKakaoMapScriptPromise?: Promise<void>;
+};
+
+type MapBounds = {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+};
+
+type KakaoMarkerEntry = {
+  marker: KakaoMarkerInstance;
+  overlay: KakaoCustomOverlayInstance;
+  point: CompanyMapPoint;
+};
+
+type LucideIconNode = Array<[string, Record<string, string>]>;
+type LucideLikeIcon = {
+  render?: (
+    props: Record<string, unknown>,
+    ref: unknown,
+  ) => { props?: { iconNode?: LucideIconNode } };
+};
+
+type WindowWithIdleCallback = Window & {
+  requestIdleCallback?: (
+    callback: () => void,
+    options?: { timeout: number },
+  ) => number;
+  cancelIdleCallback?: (handle: number) => void;
+};
+
+const MAP_CENTER = { lat: 37.6906, lng: 127.2817 };
+const DEFAULT_LEVEL = 9;
+const KAKAO_MAP_APP_KEY =
+  process.env.NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY ??
+  "6e24b4d7f1dc9780c59cdbda55beb25a";
 
 function getCategoryColor(category: string) {
   if (category.includes("제조")) return "#f97316";
@@ -79,6 +199,92 @@ function getCategoryTone(category: string) {
   return "border-slate-300 bg-slate-100 text-slate-900";
 }
 
+function getReadableTextColor(hexColor: string) {
+  const normalized = hexColor.replace("#", "");
+  const expanded =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((character) => `${character}${character}`)
+          .join("")
+      : normalized;
+
+  const red = Number.parseInt(expanded.slice(0, 2), 16);
+  const green = Number.parseInt(expanded.slice(2, 4), 16);
+  const blue = Number.parseInt(expanded.slice(4, 6), 16);
+  const luminance = (red * 299 + green * 587 + blue * 114) / 1000;
+
+  return luminance >= 150 ? "#0f172a" : "#ffffff";
+}
+
+function getLucideIconNode(icon: unknown): LucideIconNode {
+  const rendered = (icon as LucideLikeIcon).render?.({}, null);
+  return rendered?.props?.iconNode ?? [];
+}
+
+function getCategoryIconNode(category: string): LucideIconNode {
+  if (category.includes("제조")) return getLucideIconNode(Factory);
+  if (category.includes("유통")) return getLucideIconNode(Store);
+  if (category.includes("서비스")) return getLucideIconNode(BriefcaseBusiness);
+  if (category.includes("운수")) return getLucideIconNode(Truck);
+  if (category.includes("건설")) return getLucideIconNode(Hammer);
+  if (category.includes("환경")) return getLucideIconNode(Leaf);
+  if (category.includes("금융")) return getLucideIconNode(Landmark);
+  if (category.includes("전기")) return getLucideIconNode(Zap);
+
+  return getLucideIconNode(Building2);
+}
+
+function serializeSvgAttributes(attributes: Record<string, string>) {
+  return Object.entries(attributes)
+    .filter(([key]) => key !== "key")
+    .map(([key, value]) => `${key}="${escapeHtml(String(value))}"`)
+    .join(" ");
+}
+
+function buildMarkerSvg(point: CompanyMapPoint, selected = false) {
+  const categoryColor = getCategoryColor(point.primaryCategory);
+  const markerColor = selected ? "#ef4444" : categoryColor;
+  const markerRingColor = selected
+    ? "#f59e0b"
+    : point.isIndustrialArea
+      ? "#0f172a"
+      : markerColor;
+  const iconNode = getCategoryIconNode(point.primaryCategory);
+  const iconMarkup = iconNode
+    .map(
+      ([tagName, attrs]) => `<${tagName} ${serializeSvgAttributes(attrs)} />`,
+    )
+    .join("");
+
+  return [
+    '<svg xmlns="http://www.w3.org/2000/svg" width="46" height="62" viewBox="0 0 46 62">',
+    `<path d=\"M23 1C12.507 1 4 9.507 4 20c0 13.832 16.613 32.2 18.078 33.787a1.3 1.3 0 0 0 1.844 0C25.387 52.2 42 33.832 42 20 42 9.507 33.493 1 23 1Z\" fill=\"${markerColor}\" stroke=\"${markerRingColor}\" stroke-width=\"3\"/>`,
+    '<circle cx="23" cy="20" r="11" fill="rgba(255,255,255,0.18)" />',
+    '<g transform="translate(11 8)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
+    iconMarkup,
+    "</g>",
+    "</svg>",
+  ].join("");
+}
+
+function createCategoryMarkerImage(
+  kakaoMaps: KakaoMapsInstance,
+  point: CompanyMapPoint,
+  selected = false,
+) {
+  const imageSrc = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+    buildMarkerSvg(point, selected),
+  )}`;
+  // const imageSize = new kakaoMaps.Size(46, 62);
+  const imageSize = new kakaoMaps.Size(36, 42);
+  const imageOption = {
+    offset: new kakaoMaps.Point(23, 61),
+  };
+
+  return new kakaoMaps.MarkerImage(imageSrc, imageSize, imageOption);
+}
+
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => {
     switch (character) {
@@ -98,41 +304,22 @@ function escapeHtml(value: string) {
   });
 }
 
-function buildMarkerHtml(point: CompanyMapPoint, isSelected = false) {
-  const color = isSelected
-    ? "#ef4444"
-    : getCategoryColor(point.primaryCategory);
-  const ringColor = isSelected
-    ? "#f59e0b"
-    : point.isIndustrialArea
-      ? "#0f172a"
-      : color;
-  const classes = [
-    "bf-map-marker",
-    point.isManufacturing ? "bf-map-marker--manufacturing" : "",
-    point.isIndustrialArea ? "bf-map-marker--industrial" : "",
-    isSelected ? "bf-map-marker--active" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  return `<span class="${classes}" style="--bf-marker:${color};--bf-marker-ring:${ringColor};"><span class="bf-map-marker__core"></span></span>`;
-}
-
-function buildTooltipHtml(point: CompanyMapPoint) {
-  const industry =
-    point.industryChamber ||
-    point.industry ||
-    point.categories.join(", ") ||
-    point.primaryCategory ||
-    "업종 미등록";
-
-  return [
-    '<div class="bf-map-tooltip">',
-    `<strong>${escapeHtml(point.name || "기업명 미등록")}</strong>`,
-    `<span>${escapeHtml(industry)}</span>`,
+function buildMarkerOverlayElement(point: CompanyMapPoint) {
+  const categoryColor = getCategoryColor(point.primaryCategory);
+  const badgeTextColor = getReadableTextColor(categoryColor);
+  const root = document.createElement("div");
+  root.className = "bf-kakao-overlay";
+  root.innerHTML = [
+    '<div class="bf-kakao-overlay__card">',
+    '<div class="bf-kakao-overlay__head">',
+    `<strong class="bf-kakao-overlay__title">${escapeHtml(point.name || "기업명 미등록")}</strong>`,
+    "</div>",
+    `<span class="bf-kakao-overlay__badge" style="background:${categoryColor};color:${badgeTextColor};border-color:${categoryColor};">${escapeHtml(point.primaryCategory || "기타")}</span>`,
     "</div>",
   ].join("");
+  root.addEventListener("click", (event) => event.stopPropagation());
+
+  return root;
 }
 
 function getCompanyIndustryLabel(point: CompanyMapPoint) {
@@ -143,22 +330,6 @@ function getCompanyIndustryLabel(point: CompanyMapPoint) {
     point.primaryCategory ||
     "-"
   );
-}
-
-function buildPopupHtml(point: CompanyMapPoint) {
-  const category = point.primaryCategory || "기타";
-  const address = point.address || "주소 미등록";
-  const product = point.mainProduct || point.industry || "주요 품목 미등록";
-
-  return [
-    '<article class="bf-map-popup">',
-    `<strong>${escapeHtml(point.name || "기업명 미등록")}</strong>`,
-    `<span>${escapeHtml(category)}</span>`,
-    `<p>${escapeHtml(product)}</p>`,
-    `<small>${escapeHtml(address)}</small>`,
-    `<a href="/companies/${encodeURIComponent(point.id)}">상세 보기</a>`,
-    "</article>",
-  ].join("");
 }
 
 function normalizeSearchText(value: string) {
@@ -190,40 +361,150 @@ function createStatLabel(value: number, suffix = "개") {
   return `${formatNumber(value)}${suffix}`;
 }
 
+function isPointInBounds(point: CompanyMapPoint, bounds: MapBounds) {
+  return (
+    point.lat >= bounds.south &&
+    point.lat <= bounds.north &&
+    point.lng >= bounds.west &&
+    point.lng <= bounds.east
+  );
+}
+
+function isSameBounds(a: MapBounds | null, b: MapBounds | null) {
+  if (a === b) {
+    return true;
+  }
+
+  if (!a || !b) {
+    return false;
+  }
+
+  const tolerance = 0.00002;
+
+  return (
+    Math.abs(a.south - b.south) < tolerance &&
+    Math.abs(a.west - b.west) < tolerance &&
+    Math.abs(a.north - b.north) < tolerance &&
+    Math.abs(a.east - b.east) < tolerance
+  );
+}
+
+function getMapBounds(map: KakaoMapInstance): MapBounds | null {
+  const bounds = map.getBounds();
+  const southWest = bounds?.getSouthWest?.();
+  const northEast = bounds?.getNorthEast?.();
+
+  if (!southWest || !northEast) {
+    return null;
+  }
+
+  return {
+    south: southWest.getLat(),
+    west: southWest.getLng(),
+    north: northEast.getLat(),
+    east: northEast.getLng(),
+  };
+}
+
+function loadKakaoMapSdk(appKey: string) {
+  const win = window as KakaoWindow;
+
+  if (win.kakao?.maps) {
+    return Promise.resolve();
+  }
+
+  if (win.__bfKakaoMapScriptPromise) {
+    return win.__bfKakaoMapScriptPromise;
+  }
+
+  win.__bfKakaoMapScriptPromise = new Promise<void>((resolve, reject) => {
+    const onLoaded = () => {
+      if (!win.kakao?.maps?.load) {
+        reject(new Error("Kakao Maps SDK를 초기화하지 못했습니다."));
+        return;
+      }
+
+      win.kakao.maps.load(() => resolve());
+    };
+
+    const existingScript = document.querySelector(
+      'script[data-bf-kakao-map-sdk="true"]',
+    ) as HTMLScriptElement | null;
+
+    if (existingScript) {
+      if (win.kakao?.maps?.load) {
+        onLoaded();
+        return;
+      }
+
+      existingScript.addEventListener("load", onLoaded, { once: true });
+      existingScript.addEventListener(
+        "error",
+        () => reject(new Error("Kakao Maps SDK 스크립트 로드에 실패했습니다.")),
+        { once: true },
+      );
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(
+      appKey,
+    )}&autoload=false&libraries=services,clusterer`;
+    script.async = true;
+    script.defer = true;
+    script.dataset.bfKakaoMapSdk = "true";
+    script.addEventListener("load", onLoaded, { once: true });
+    script.addEventListener(
+      "error",
+      () => reject(new Error("Kakao Maps SDK 스크립트 로드에 실패했습니다.")),
+      { once: true },
+    );
+    document.head.append(script);
+  });
+
+  return win.__bfKakaoMapScriptPromise;
+}
+
 function fitMapToPoints(
-  L: LeafletNamespace,
-  map: LeafletMap,
+  kakaoMaps: KakaoMapsInstance,
+  map: KakaoMapInstance,
   points: CompanyMapPoint[],
 ) {
   if (points.length === 0) {
-    map.setView(MAP_CENTER, DEFAULT_ZOOM, { animate: false });
+    map.setCenter(new kakaoMaps.LatLng(MAP_CENTER.lat, MAP_CENTER.lng));
+    map.setLevel(DEFAULT_LEVEL);
     return;
   }
 
-  const bounds = L.latLngBounds(
-    points.map((point) => [point.lat, point.lng] as [number, number]),
-  );
+  const bounds = new kakaoMaps.LatLngBounds();
 
-  if (bounds.isValid()) {
-    map.fitBounds(bounds.pad(0.16), {
-      animate: false,
-      maxZoom: 13,
-    });
+  for (const point of points) {
+    bounds.extend(new kakaoMaps.LatLng(point.lat, point.lng));
   }
+
+  map.setBounds(bounds);
 }
 
-export function CompanyMapDashboard({
+export function CompanyKakaoMapDashboard({
   points,
   stats,
-}: CompanyMapDashboardProps) {
+}: CompanyKakaoMapDashboardProps) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
-  const clusterLayerRef = useRef<MarkerClusterGroup | null>(null);
-  const regionOutlineLayerRef = useRef<LayerGroup | null>(null);
-  const leafletRef = useRef<LeafletNamespace | null>(null);
+  const mapRef = useRef<KakaoMapInstance | null>(null);
+  const kakaoMapsRef = useRef<KakaoMapsInstance | null>(null);
+  const geocoderRef = useRef<KakaoGeocoderInstance | null>(null);
+  const clustererRef = useRef<KakaoMarkerClustererInstance | null>(null);
+  const markerRegistryRef = useRef<Map<string, KakaoMarkerEntry>>(new Map());
+  const selectedMarkerIdRef = useRef<string | null>(null);
+  const mapIdleTimerRef = useRef<number | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [addressQuery, setAddressQuery] = useState("");
+  const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
   const [activeRegion, setActiveRegion] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
   const [activeCompanyId, setActiveCompanyId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -231,6 +512,7 @@ export function CompanyMapDashboard({
   const [isCompanyListOpen, setIsCompanyListOpen] = useState(false);
 
   const normalizedQuery = normalizeSearchText(query);
+  const deferredMapBounds = useDeferredValue(mapBounds);
   const filteredPoints = useMemo(
     () =>
       points.filter((point) => {
@@ -273,6 +555,15 @@ export function CompanyMapDashboard({
     }));
   }, [categoryCountBasePoints, stats.categoryCounts]);
   const mapPoints = useMemo(() => filteredPoints, [filteredPoints]);
+  const visibleMapPoints = useMemo(
+    () =>
+      deferredMapBounds
+        ? filteredPoints.filter((point) =>
+            isPointInBounds(point, deferredMapBounds),
+          )
+        : filteredPoints,
+    [deferredMapBounds, filteredPoints],
+  );
   const activeCompany = useMemo(
     () =>
       activeCompanyId
@@ -282,14 +573,32 @@ export function CompanyMapDashboard({
   );
   const visibleCompanyList = useMemo(
     () =>
-      filteredPoints.toSorted(
+      visibleMapPoints.toSorted(
         (a, b) =>
           Number(b.isManufacturing) - Number(a.isManufacturing) ||
           a.name.localeCompare(b.name, "ko-KR"),
       ),
-    [filteredPoints],
+    [visibleMapPoints],
   );
   const hasActiveFilters = Boolean(activeRegion || activeCategory || query);
+
+  const updateActiveCompanyId = useCallback(
+    (next: SetStateAction<string | null>) => {
+      startTransition(() => {
+        setActiveCompanyId(next);
+      });
+    },
+    [],
+  );
+
+  const syncMapBounds = useCallback((map: KakaoMapInstance) => {
+    const nextBounds = getMapBounds(map);
+    startTransition(() => {
+      setMapBounds((currentBounds) =>
+        isSameBounds(currentBounds, nextBounds) ? currentBounds : nextBounds,
+      );
+    });
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -335,207 +644,373 @@ export function CompanyMapDashboard({
   }, [isSidebarOpen]);
 
   useEffect(() => {
+    const idleWindow = window as WindowWithIdleCallback;
     let isCancelled = false;
+    let idleHandle: number | null = null;
+    let fallbackHandle: number | null = null;
 
     async function initializeMap() {
-      const leafletModule = (await import("leaflet")) as LeafletNamespace & {
-        default?: LeafletNamespace;
-      };
-      const L = leafletModule.default ?? leafletModule;
-
-      (window as Window & { L?: LeafletNamespace }).L = L;
-      await import("leaflet.markercluster");
-
-      if (isCancelled || !mapElementRef.current || mapRef.current) {
+      if (!KAKAO_MAP_APP_KEY) {
+        setMapError("Kakao JavaScript 키가 설정되지 않았습니다.");
         return;
       }
 
-      leafletRef.current = L;
-      const map = L.map(mapElementRef.current, {
-        center: MAP_CENTER,
-        zoom: DEFAULT_ZOOM,
-        minZoom: 8,
-        maxZoom: 18,
-        preferCanvas: true,
-        zoomControl: false,
-      });
+      try {
+        await loadKakaoMapSdk(KAKAO_MAP_APP_KEY);
 
-      L.control.zoom({ position: "bottomright" }).addTo(map);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-      }).addTo(map);
+        if (isCancelled || !mapElementRef.current || mapRef.current) {
+          return;
+        }
 
-      mapRef.current = map;
-      setIsMapReady(true);
+        const kakaoMaps = (window as KakaoWindow).kakao?.maps;
+
+        if (!kakaoMaps) {
+          setMapError("Kakao Maps 객체를 찾을 수 없습니다.");
+          return;
+        }
+
+        const map = new kakaoMaps.Map(mapElementRef.current, {
+          center: new kakaoMaps.LatLng(MAP_CENTER.lat, MAP_CENTER.lng),
+          level: DEFAULT_LEVEL,
+        });
+        const geocoder = new kakaoMaps.services.Geocoder();
+        const clusterer = new kakaoMaps.MarkerClusterer({
+          map,
+          averageCenter: true,
+          minLevel: 8,
+          disableClickZoom: false,
+          calculator: [10, 30, 100],
+          texts: (size: number) => formatNumber(size),
+          styles: [
+            {
+              width: "40px",
+              height: "40px",
+              background: "#0f172a",
+              color: "#ffffff",
+              borderRadius: "999px",
+              fontWeight: "800",
+              lineHeight: "40px",
+              textAlign: "center",
+              border: "3px solid #ffffff",
+            },
+            {
+              width: "46px",
+              height: "46px",
+              background: "#ea580c",
+              color: "#ffffff",
+              borderRadius: "999px",
+              fontWeight: "800",
+              lineHeight: "46px",
+              textAlign: "center",
+              border: "3px solid #ffffff",
+            },
+            {
+              width: "54px",
+              height: "54px",
+              background: "#dc2626",
+              color: "#ffffff",
+              borderRadius: "999px",
+              fontWeight: "800",
+              lineHeight: "54px",
+              textAlign: "center",
+              border: "3px solid #ffffff",
+            },
+            {
+              width: "60px",
+              height: "60px",
+              background: "#7c2d12",
+              color: "#ffffff",
+              borderRadius: "999px",
+              fontWeight: "800",
+              lineHeight: "60px",
+              textAlign: "center",
+              border: "3px solid #ffffff",
+            },
+          ],
+        });
+
+        kakaoMaps.event.addListener(map, "idle", () => {
+          if (mapIdleTimerRef.current !== null) {
+            window.clearTimeout(mapIdleTimerRef.current);
+          }
+
+          mapIdleTimerRef.current = window.setTimeout(() => {
+            syncMapBounds(map);
+            mapIdleTimerRef.current = null;
+          }, 220);
+        });
+        kakaoMaps.event.addListener(map, "click", () => {
+          updateActiveCompanyId(null);
+        });
+
+        kakaoMapsRef.current = kakaoMaps;
+        geocoderRef.current = geocoder;
+        clustererRef.current = clusterer;
+        mapRef.current = map;
+        setMapError(null);
+        setIsMapReady(true);
+
+        window.setTimeout(() => {
+          map.relayout();
+          syncMapBounds(map);
+        }, 120);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "카카오 지도를 불러오는 중 오류가 발생했습니다.";
+        setMapError(message);
+      }
     }
 
-    void initializeMap();
+    if (idleWindow.requestIdleCallback) {
+      idleHandle = idleWindow.requestIdleCallback(
+        () => {
+          void initializeMap();
+        },
+        { timeout: 1200 },
+      );
+    } else {
+      fallbackHandle = window.setTimeout(() => {
+        void initializeMap();
+      }, 50);
+    }
+    const markerRegistry = markerRegistryRef.current;
 
     return () => {
       isCancelled = true;
-      mapRef.current?.remove();
+      if (idleHandle !== null && idleWindow.cancelIdleCallback) {
+        idleWindow.cancelIdleCallback(idleHandle);
+      }
+      if (fallbackHandle !== null) {
+        window.clearTimeout(fallbackHandle);
+      }
+      if (mapIdleTimerRef.current !== null) {
+        window.clearTimeout(mapIdleTimerRef.current);
+        mapIdleTimerRef.current = null;
+      }
+      if (clustererRef.current) {
+        clustererRef.current.clear?.();
+        clustererRef.current.setMap?.(null);
+      }
+
+      for (const entry of markerRegistry.values()) {
+        entry.overlay.setMap(null);
+        entry.marker.setMap(null);
+      }
+
+      markerRegistry.clear();
       mapRef.current = null;
-      leafletRef.current = null;
-      clusterLayerRef.current = null;
-      regionOutlineLayerRef.current = null;
+      kakaoMapsRef.current = null;
+      geocoderRef.current = null;
+      clustererRef.current = null;
+      selectedMarkerIdRef.current = null;
     };
-  }, []);
+  }, [syncMapBounds, updateActiveCompanyId]);
 
   useEffect(() => {
-    const L = leafletRef.current;
+    const kakaoMaps = kakaoMapsRef.current;
     const map = mapRef.current;
+    const clusterer = clustererRef.current;
 
-    if (!isMapReady || !L || !map) {
+    if (!isMapReady || !kakaoMaps || !map || !clusterer) {
       return;
     }
 
-    if (clusterLayerRef.current) {
-      map.removeLayer(clusterLayerRef.current);
-      clusterLayerRef.current = null;
+    for (const entry of markerRegistryRef.current.values()) {
+      entry.overlay.setMap(null);
+      entry.marker.setMap(null);
     }
 
-    if (regionOutlineLayerRef.current) {
-      map.removeLayer(regionOutlineLayerRef.current);
-      regionOutlineLayerRef.current = null;
-    }
+    markerRegistryRef.current.clear();
+    clusterer.clear?.();
+    selectedMarkerIdRef.current = null;
 
-    const regionOutlineLayer = L.layerGroup();
-
-    for (const region of REGION_BOUNDARIES) {
-      const isActiveRegion = activeRegion === region.region;
-      const color = REGION_OUTLINE_COLORS[region.region] ?? "#0f766e";
-      const geoJsonLayer = L.geoJSON(region.geometry as GeoJsonObject, {
-        style: {
-          color,
-          weight: isActiveRegion ? 4 : 3,
-          opacity: isActiveRegion ? 0.95 : 0.75,
-          fillColor: color,
-          fillOpacity: isActiveRegion ? 0.08 : 0.03,
-          dashArray: isActiveRegion ? undefined : "10 8",
-          className: "bf-region-outline",
-        },
-        interactive: false,
-        bubblingMouseEvents: false,
-      });
-
-      geoJsonLayer.addTo(regionOutlineLayer);
-    }
-
-    map.addLayer(regionOutlineLayer);
-    regionOutlineLayerRef.current = regionOutlineLayer;
-
-    if (mapPoints.length === 0) {
-      return;
-    }
-
-    const clusterLayer = L.markerClusterGroup({
-      showCoverageOnHover: false,
-      spiderfyOnMaxZoom: true,
-      maxClusterRadius: 52,
-      iconCreateFunction(cluster) {
-        const count = cluster.getChildCount();
-        const sizeClass =
-          count >= 100 ? "large" : count >= 30 ? "medium" : "small";
-
-        return L.divIcon({
-          html: `<span>${formatNumber(count)}</span>`,
-          className: `bf-map-cluster bf-map-cluster--${sizeClass}`,
-          iconSize: L.point(46, 46, true),
-        });
-      },
-    });
+    const markers: KakaoMarkerInstance[] = [];
 
     for (const point of mapPoints) {
-      const selected = activeCompanyId === point.id;
-      const iconSize = selected
-        ? point.isManufacturing
-          ? 42
-          : 38
-        : point.isManufacturing
-          ? 34
-          : 28;
-      const marker = L.marker([point.lat, point.lng], {
-        title: point.name,
-        icon: L.divIcon({
-          html: buildMarkerHtml(point, selected),
-          className: "bf-map-marker-icon",
-          iconSize: L.point(iconSize, iconSize, true),
-          iconAnchor: L.point(iconSize / 2, iconSize, true),
-        }),
-        keyboard: true,
-        zIndexOffset: selected ? 1000 : 0,
+      const position = new kakaoMaps.LatLng(point.lat, point.lng);
+      const marker = new kakaoMaps.Marker({
+        position,
+        title: point.name || "기업명 미등록",
+        image: createCategoryMarkerImage(kakaoMaps, point, false),
+      });
+      const overlayContent = buildMarkerOverlayElement(point);
+      const overlay = new kakaoMaps.CustomOverlay({
+        content: overlayContent,
+        position,
+        yAnchor: 1.26,
+        zIndex: 8,
       });
 
-      marker.bindTooltip(buildTooltipHtml(point), {
-        direction: "top",
-        offset: L.point(0, -14),
-        opacity: 1,
-        sticky: true,
+      kakaoMaps.event.addListener(marker, "click", () => {
+        updateActiveCompanyId((current) =>
+          current === point.id ? null : point.id,
+        );
       });
-      marker.bindPopup(buildPopupHtml(point), {
-        closeButton: true,
-        minWidth: 220,
-        autoPan: false,
+
+      markerRegistryRef.current.set(point.id, {
+        marker,
+        overlay,
+        point,
       });
-      marker.on("focus click popupopen", () => setActiveCompanyId(point.id));
-      clusterLayer.addLayer(marker);
+      markers.push(marker);
     }
 
-    map.addLayer(clusterLayer);
-    clusterLayerRef.current = clusterLayer;
-  }, [activeCompanyId, activeRegion, isMapReady, mapPoints, mapRenderNonce]);
+    if (markers.length > 0) {
+      clusterer.addMarkers(markers);
+    }
+  }, [
+    isMapReady,
+    mapPoints,
+    mapRenderNonce,
+    syncMapBounds,
+    updateActiveCompanyId,
+  ]);
 
   useEffect(() => {
-    const L = leafletRef.current;
+    const kakaoMaps = kakaoMapsRef.current;
     const map = mapRef.current;
 
-    if (!isMapReady || !L || !map) {
+    if (!isMapReady || !kakaoMaps || !map) {
       return;
     }
 
-    fitMapToPoints(L, map, mapPoints);
-  }, [isMapReady, mapPoints, mapRenderNonce]);
+    const previousId = selectedMarkerIdRef.current;
+    const previousEntry = previousId
+      ? markerRegistryRef.current.get(previousId)
+      : null;
+
+    if (previousEntry) {
+      previousEntry.marker.setImage(
+        createCategoryMarkerImage(kakaoMaps, previousEntry.point, false),
+      );
+      previousEntry.overlay.setMap(null);
+    }
+
+    const currentEntry = activeCompanyId
+      ? markerRegistryRef.current.get(activeCompanyId)
+      : null;
+
+    if (currentEntry) {
+      currentEntry.marker.setImage(
+        createCategoryMarkerImage(kakaoMaps, currentEntry.point, true),
+      );
+      currentEntry.overlay.setMap(map);
+      selectedMarkerIdRef.current = activeCompanyId;
+      return;
+    }
+
+    selectedMarkerIdRef.current = null;
+  }, [activeCompanyId, isMapReady, mapPoints]);
+
+  useEffect(() => {
+    const kakaoMaps = kakaoMapsRef.current;
+    const map = mapRef.current;
+
+    if (!isMapReady || !kakaoMaps || !map) {
+      return;
+    }
+
+    fitMapToPoints(kakaoMaps, map, mapPoints);
+    syncMapBounds(map);
+  }, [isMapReady, mapPoints, mapRenderNonce, syncMapBounds]);
 
   function resetFilters() {
     setActiveRegion(null);
     setActiveCategory(null);
+    setQueryInput("");
     setQuery("");
-    setActiveCompanyId(null);
+    updateActiveCompanyId(null);
+  }
+
+  function applyKeywordSearch() {
+    setQuery(queryInput);
+    updateActiveCompanyId(null);
   }
 
   function resetMapRender() {
-    const L = leafletRef.current;
+    const kakaoMaps = kakaoMapsRef.current;
     const map = mapRef.current;
 
     setMapRenderNonce((current) => current + 1);
 
-    if (!L || !map) {
+    if (!kakaoMaps || !map) {
       return;
     }
 
-    map.invalidateSize({ animate: false });
-    fitMapToPoints(L, map, mapPoints);
+    map.relayout();
+    fitMapToPoints(kakaoMaps, map, mapPoints);
+    syncMapBounds(map);
 
     window.setTimeout(() => {
-      map.invalidateSize({ animate: false });
-      fitMapToPoints(L, map, mapPoints);
+      map.relayout();
+      syncMapBounds(map);
     }, 120);
   }
 
   function focusCompanyOnMap(company: CompanyMapPoint) {
+    const kakaoMaps = kakaoMapsRef.current;
     const map = mapRef.current;
 
-    setActiveCompanyId(company.id);
+    updateActiveCompanyId(company.id);
 
-    if (!map) {
+    if (!kakaoMaps || !map) {
       return;
     }
 
-    map.setView([company.lat, company.lng], Math.max(map.getZoom(), 14), {
-      animate: true,
-    });
+    const position = new kakaoMaps.LatLng(company.lat, company.lng);
+    map.setCenter(position);
+
+    if (map.getLevel() > 4) {
+      map.setLevel(4);
+    }
+
+    const markerEntry = markerRegistryRef.current.get(company.id);
+
+    if (markerEntry) {
+      markerEntry.overlay.setMap(map);
+    }
+
+    syncMapBounds(map);
+  }
+
+  function searchByAddress() {
+    const kakaoMaps = kakaoMapsRef.current;
+    const map = mapRef.current;
+    const geocoder = geocoderRef.current;
+    const normalizedAddress = addressQuery.trim();
+
+    if (!kakaoMaps || !map || !geocoder || !normalizedAddress) {
+      return;
+    }
+
+    setSearchError(null);
+
+    geocoder.addressSearch(
+      normalizedAddress,
+      (result: Array<{ x: string; y: string }>, status: string) => {
+        if (status !== kakaoMaps.services.Status.OK || result.length === 0) {
+          setSearchError("주소 검색 결과가 없습니다.");
+          return;
+        }
+
+        const coordinate = result[0];
+        const target = new kakaoMaps.LatLng(
+          Number(coordinate.y),
+          Number(coordinate.x),
+        );
+
+        map.setCenter(target);
+
+        if (map.getLevel() > 4) {
+          map.setLevel(4);
+        }
+
+        setSearchError(null);
+        syncMapBounds(map);
+      },
+    );
   }
 
   return (
@@ -586,11 +1061,23 @@ export function CompanyMapDashboard({
             ) : null}
           </div>
         </div>
-        <div className="relative h-[100vh] min-h-[380px] sm:h-[68vh] xl:h-[calc(100vh-230px)]">
-          <div ref={mapElementRef} className="h-full w-full" />
-          {!isMapReady ? (
+        <div className="relative h-[72svh] min-h-[420px] sm:h-[68svh] xl:h-[calc(100svh-230px)]">
+          <div
+            ref={mapElementRef}
+            className="h-full w-full bg-[radial-gradient(circle_at_20%_20%,#dbeafe,transparent_35%),radial-gradient(circle_at_80%_15%,#bbf7d0,transparent_32%),#e2e8f0]"
+          />
+          {mapError ? (
+            <div className="absolute inset-0 z-[500] grid place-items-center bg-white/90 px-6 text-center text-sm font-semibold text-red-700">
+              {mapError}
+            </div>
+          ) : !isMapReady ? (
             <div className="absolute inset-0 z-[500] grid place-items-center bg-white/80 text-sm font-semibold text-slate-700">
               지도 불러오는 중
+            </div>
+          ) : null}
+          {searchError ? (
+            <div className="absolute left-4 top-4 z-[560] max-w-[calc(100%-32px)] rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 shadow">
+              {searchError}
             </div>
           ) : null}
           <div
@@ -681,13 +1168,13 @@ export function CompanyMapDashboard({
           <div className="pointer-events-none absolute left-4 top-4 z-[500] hidden max-w-[calc(100%-32px)] gap-2 md:grid md:max-w-sm">
             <div className="rounded-lg border border-white/70 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                현재 우리 지역 회원사
+                현재 지도에 보이는 회원사
               </p>
               <strong className="mt-1 block text-2xl font-semibold text-slate-950 sm:text-3xl">
-                {createStatLabel(filteredPoints.length)}
+                {createStatLabel(visibleMapPoints.length)}
               </strong>
               <span className="mt-1 block text-sm text-slate-600">
-                필터 적용 결과
+                필터 + 지도 영역 기준
               </span>
             </div>
           </div>
@@ -703,7 +1190,7 @@ export function CompanyMapDashboard({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setActiveCompanyId(null)}
+                  onClick={() => updateActiveCompanyId(null)}
                   aria-label="선택 기업 닫기"
                   className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
@@ -927,24 +1414,67 @@ export function CompanyMapDashboard({
                 />
                 <input
                   id="company-map-search"
-                  value={query}
+                  value={queryInput}
                   onChange={(event) => {
-                    setQuery(event.target.value);
-                    setActiveCompanyId(null);
+                    setQueryInput(event.target.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                    }
                   }}
                   placeholder="기업명, 주소, 주요품목"
                   className="h-11 min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
                 />
-                {query ? (
+                {queryInput ? (
                   <button
                     type="button"
-                    onClick={() => setQuery("")}
+                    onClick={() => setQueryInput("")}
                     aria-label="검색어 지우기"
                     className="inline-flex size-7 items-center justify-center rounded text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                   >
                     <X className="size-4" aria-hidden="true" />
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={applyKeywordSearch}
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  검색
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:p-3">
+              <label
+                htmlFor="company-map-address-search"
+                className="text-sm font-semibold text-slate-800"
+              >
+                주소 검색
+              </label>
+              <div className="mt-2 flex min-w-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+                <MapPin className="size-4 shrink-0 text-slate-400" />
+                <input
+                  id="company-map-address-search"
+                  value={addressQuery}
+                  onChange={(event) => setAddressQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      searchByAddress();
+                    }
+                  }}
+                  placeholder="예: 경기 남양주시 다산동"
+                  className="h-11 min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={searchByAddress}
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  이동
+                </button>
               </div>
             </div>
 
@@ -966,7 +1496,7 @@ export function CompanyMapDashboard({
                   type="button"
                   onClick={() => {
                     setActiveRegion(null);
-                    setActiveCompanyId(null);
+                    updateActiveCompanyId(null);
                   }}
                   aria-pressed={!activeRegion}
                   className={[
@@ -987,7 +1517,7 @@ export function CompanyMapDashboard({
                       type="button"
                       onClick={() => {
                         setActiveRegion(selected ? null : region.value);
-                        setActiveCompanyId(null);
+                        updateActiveCompanyId(null);
                       }}
                       aria-pressed={selected}
                       className={[
@@ -1020,7 +1550,7 @@ export function CompanyMapDashboard({
                   type="button"
                   onClick={() => {
                     setActiveCategory(null);
-                    setActiveCompanyId(null);
+                    updateActiveCompanyId(null);
                   }}
                   aria-pressed={!activeCategory}
                   className={[
@@ -1043,7 +1573,7 @@ export function CompanyMapDashboard({
                       type="button"
                       onClick={() => {
                         setActiveCategory(selected ? null : category.value);
-                        setActiveCompanyId(null);
+                        updateActiveCompanyId(null);
                       }}
                       aria-pressed={selected}
                       className={[

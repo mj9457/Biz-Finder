@@ -2,9 +2,6 @@ import { CompanyLoadingSpinner } from "@/features/companies/components/company-l
 
 export default function Loading() {
   return (
-    <CompanyLoadingSpinner
-      label="검색 결과를 불러오는 중"
-      variant="overlay"
-    />
+    <CompanyLoadingSpinner label="잠시만 기다려 주세요" variant="overlay" />
   );
 }
