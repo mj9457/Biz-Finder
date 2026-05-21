@@ -60,7 +60,7 @@ export type CompanySearchFilters = {
   q: string;
   region: CompanyRegion | "";
   categories: CompanyCategory[];
-  employeeRange: CompanyEmployeeRange | "";
+  employeeRanges: CompanyEmployeeRange[];
   sort: CompanySort;
   view: CompanyView;
   page: number;

@@ -30,7 +30,7 @@ function EmptyCompanyResult({ filters }: { filters: CompanySearchFilters }) {
     q: "",
     region: "",
     categories: [],
-    employeeRange: "",
+    employeeRanges: [],
   });
 
   return (

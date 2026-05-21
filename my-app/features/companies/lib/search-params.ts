@@ -56,13 +56,28 @@ function parseRegion(value: string | string[] | undefined) {
   return regionSet.has(region) ? (region as CompanyRegion) : "";
 }
 
-function parseEmployeeRange(
-  value: string | string[] | undefined,
-): CompanyEmployeeRange | "" {
-  const employeeRange = compactText(value);
-  return employeeRangeSet.has(employeeRange)
-    ? (employeeRange as CompanyEmployeeRange)
-    : "";
+function parseEmployeeRanges(value: string | string[] | undefined) {
+  const parsedEmployeeRanges: CompanyEmployeeRange[] = [];
+  const seen = new Set<CompanyEmployeeRange>();
+
+  for (const employeeRange of values(value)) {
+    const normalizedEmployeeRange = employeeRange.trim();
+
+    if (!employeeRangeSet.has(normalizedEmployeeRange)) {
+      continue;
+    }
+
+    const typedEmployeeRange = normalizedEmployeeRange as CompanyEmployeeRange;
+
+    if (seen.has(typedEmployeeRange)) {
+      continue;
+    }
+
+    seen.add(typedEmployeeRange);
+    parsedEmployeeRanges.push(typedEmployeeRange);
+  }
+
+  return parsedEmployeeRanges;
 }
 
 function parseSort(value: string | string[] | undefined): CompanySort {
@@ -97,7 +112,7 @@ export function parseCompanySearchParams(
       compactText(params.product),
     region: parseRegion(params.region),
     categories: parseCategories(params.category),
-    employeeRange: parseEmployeeRange(params.employees),
+    employeeRanges: parseEmployeeRanges(params.employees),
     sort: parseSort(params.sort),
     view,
     page: parsePage(params.page),
@@ -137,8 +152,8 @@ function appendCompanyFilterParams(
   for (const category of filters.categories) {
     params.append("category", category);
   }
-  if (filters.employeeRange) {
-    params.set("employees", filters.employeeRange);
+  for (const employeeRange of filters.employeeRanges) {
+    params.append("employees", employeeRange);
   }
   if (filters.sort !== "relevance") params.set("sort", filters.sort);
 }
@@ -155,7 +170,7 @@ export function hasActiveCompanyFilters(filters: CompanySearchFilters) {
   return Boolean(
     filters.q ||
       filters.region ||
-      filters.employeeRange ||
+      filters.employeeRanges.length > 0 ||
       filters.categories.length > 0,
   );
 }

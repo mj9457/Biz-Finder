@@ -38,8 +38,8 @@ export default async function CompanyMapPage() {
                 width={480}
                 height={66}
                 sizes="(min-width: 640px) 240px, 192px"
-                preload
                 className="h-auto w-48 sm:w-60"
+                loading="lazy"
               />
               <span className="mt-2 text-sm font-medium leading-none text-gray-500">
                 회원사 지도 대시보드

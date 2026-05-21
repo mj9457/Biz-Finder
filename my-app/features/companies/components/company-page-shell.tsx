@@ -27,7 +27,7 @@ export function CompanyPageShell({
     "filter",
     filters.region,
     filters.categories.join("|"),
-    filters.employeeRange,
+    filters.employeeRanges.join("|"),
   ].join("-");
 
   return (
@@ -97,9 +97,9 @@ export function CompanyPageShell({
                   width={480}
                   height={66}
                   sizes="(min-width: 640px) 240px, 192px"
-                  preload
                   decoding="sync"
                   className="h-auto w-48 sm:w-60"
+                  loading="lazy"
                 />
                 <span className="mt-2 text-sm font-medium leading-none text-gray-500 sm:text-sm">
                   회원사 검색서비스

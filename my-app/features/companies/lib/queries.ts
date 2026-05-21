@@ -126,6 +126,7 @@ type ChainedQuery<T> = {
   gte: (column: string, value: number) => T;
   lte: (column: string, value: number) => T;
   ilike: (column: string, pattern: string) => T;
+  or: (filters: string) => T;
   order: (
     column: string,
     options?: { ascending?: boolean; nullsFirst?: boolean },
@@ -357,6 +358,10 @@ function sanitizeKeyword(value: string) {
   return value.trim().replace(/,/g, " ");
 }
 
+function hasTextKeyword(value: string) {
+  return /[A-Za-z\u3131-\u318E\uAC00-\uD7A3]/.test(value);
+}
+
 function applyKeywordFilter<T extends ChainedQuery<T>>(
   query: T,
   keyword: string,
@@ -371,33 +376,56 @@ function applyKeywordFilter<T extends ChainedQuery<T>>(
     return query;
   }
 
+  // 숫자/기호만 입력된 검색어는 기업 검색 대상으로 보지 않는다.
+  if (!hasTextKeyword(safeKeyword)) {
+    return query.eq("id", "-1");
+  }
+
   const pattern = `%${safeKeyword}%`;
   return query.ilike("search_text", pattern);
 }
 
 function applyEmployeeRangeFilter<T extends ChainedQuery<T>>(
   query: T,
-  employeeRange: CompanySearchFilters["employeeRange"],
+  employeeRanges: CompanySearchFilters["employeeRanges"],
 ): T {
-  if (!employeeRange) {
+  if (employeeRanges.length === 0) {
     return query;
   }
 
-  const range = employeeRangeMap.get(employeeRange);
+  const employeeRangeConditions = [...new Set(employeeRanges)]
+    .map((employeeRange) => {
+      const range = employeeRangeMap.get(employeeRange);
 
-  if (!range) {
+      if (!range) {
+        return null;
+      }
+
+      const conditions: string[] = [];
+
+      if ("min" in range) {
+        conditions.push(`employee_count.gte.${range.min}`);
+      }
+
+      if ("max" in range) {
+        conditions.push(`employee_count.lte.${range.max}`);
+      }
+
+      if (conditions.length === 0) {
+        return null;
+      }
+
+      return conditions.length === 1
+        ? conditions[0]
+        : `and(${conditions.join(",")})`;
+    })
+    .filter((condition): condition is string => Boolean(condition));
+
+  if (employeeRangeConditions.length === 0) {
     return query;
   }
 
-  if ("min" in range) {
-    query = query.gte("employee_count", range.min);
-  }
-
-  if ("max" in range) {
-    query = query.lte("employee_count", range.max);
-  }
-
-  return query;
+  return query.or(employeeRangeConditions.join(","));
 }
 
 function applySearchFilters<T extends ChainedQuery<T>>(
@@ -412,7 +440,7 @@ function applySearchFilters<T extends ChainedQuery<T>>(
     query = query.in("primary_category", filters.categories);
   }
 
-  query = applyEmployeeRangeFilter(query, filters.employeeRange);
+  query = applyEmployeeRangeFilter(query, filters.employeeRanges);
   query = applyKeywordFilter(query, filters.q);
 
   return query;

@@ -39,14 +39,18 @@ export function ActiveFilterChips({ filters }: ActiveFilterChipsProps) {
     });
   }
 
-  if (filters.employeeRange) {
+  for (const employeeRangeValue of filters.employeeRanges) {
     const employeeRange = COMPANY_EMPLOYEE_RANGES.find(
-      (option) => option.value === filters.employeeRange,
+      (option) => option.value === employeeRangeValue,
     );
 
     chips.push({
-      label: `근로자수: ${employeeRange?.label ?? filters.employeeRange}`,
-      href: createCompanySearchHref(filters, { employeeRange: "" }),
+      label: `근로자수: ${employeeRange?.label ?? employeeRangeValue}`,
+      href: createCompanySearchHref(filters, {
+        employeeRanges: filters.employeeRanges.filter(
+          (value) => value !== employeeRangeValue,
+        ),
+      }),
     });
   }
 

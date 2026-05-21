@@ -23,6 +23,7 @@ import { createCompanySearchHref } from "../lib/search-params";
 import type {
   CompanyCategory,
   CompanyEmployeeRange,
+  CompanyFacetOption,
   CompanyFacets,
   CompanyRegion,
   CompanySearchFilters,
@@ -41,6 +42,9 @@ type CompanyFilterSidebarProps = {
 const CATEGORY_ORDER_INDEX = new Map(
   COMPANY_CATEGORIES.map((category, index) => [category, index]),
 );
+const EMPLOYEE_RANGE_ORDER_INDEX = new Map(
+  COMPANY_EMPLOYEE_RANGES.map((range, index) => [range.value, index]),
+);
 
 function sortCategories(categories: CompanyCategory[]) {
   return [...categories].toSorted((a, b) => {
@@ -49,6 +53,27 @@ function sortCategories(categories: CompanyCategory[]) {
 
     return left - right || a.localeCompare(b, "ko-KR");
   });
+}
+
+function sortEmployeeRanges(employeeRanges: CompanyEmployeeRange[]) {
+  return [...employeeRanges].toSorted((a, b) => {
+    const left = EMPLOYEE_RANGE_ORDER_INDEX.get(a) ?? Number.MAX_SAFE_INTEGER;
+    const right = EMPLOYEE_RANGE_ORDER_INDEX.get(b) ?? Number.MAX_SAFE_INTEGER;
+
+    return left - right || a.localeCompare(b, "ko-KR");
+  });
+}
+
+function mergeCategoryFacetCounts(groups: CompanyFacetOption[][]) {
+  const counts = new Map<string, number>();
+
+  for (const group of groups) {
+    for (const facet of group) {
+      counts.set(facet.value, (counts.get(facet.value) ?? 0) + facet.count);
+    }
+  }
+
+  return [...counts.entries()].map(([value, count]) => ({ value, count }));
 }
 
 export function CompanyFilterSidebar({
@@ -68,9 +93,9 @@ export function CompanyFilterSidebar({
   const [selectedCategories, setSelectedCategories] = useState<
     CompanyCategory[]
   >(() => sortCategories(filters.categories));
-  const [selectedEmployeeRange, setSelectedEmployeeRange] = useState<
-    CompanyEmployeeRange | ""
-  >(filters.employeeRange);
+  const [selectedEmployeeRanges, setSelectedEmployeeRanges] = useState<
+    CompanyEmployeeRange[]
+  >(() => sortEmployeeRanges(filters.employeeRanges));
 
   const regionOptions = useMemo<
     Array<{ label: string; value: CompanyRegion | "" }>
@@ -90,9 +115,9 @@ export function CompanyFilterSidebar({
     [selectedCategories],
   );
   const selectedEmployeeRangeLabel =
-    COMPANY_EMPLOYEE_RANGES.find(
-      (option) => option.value === selectedEmployeeRange,
-    )?.label ?? "전체";
+    selectedEmployeeRanges.length === 0
+      ? "전체"
+      : `${selectedEmployeeRanges.length}개 선택`;
   const fieldsId = `${idPrefix}-fields`;
   const industryOptionsId = `${idPrefix}-industry-options`;
   const employeeOptionsId = `${idPrefix}-employee-options`;
@@ -105,20 +130,40 @@ export function CompanyFilterSidebar({
     selectedCategories.some(
       (category, index) => category !== normalizedFilterCategories[index],
     );
+  const normalizedFilterEmployeeRanges = useMemo(
+    () => sortEmployeeRanges(filters.employeeRanges),
+    [filters.employeeRanges],
+  );
+  const hasEmployeeRangeDraftChanges =
+    selectedEmployeeRanges.length !== normalizedFilterEmployeeRanges.length ||
+    selectedEmployeeRanges.some(
+      (employeeRange, index) =>
+        employeeRange !== normalizedFilterEmployeeRanges[index],
+    );
   const hasDraftChanges =
     selectedRegion !== filters.region ||
-    selectedEmployeeRange !== filters.employeeRange ||
+    hasEmployeeRangeDraftChanges ||
     hasCategoryDraftChanges;
 
   const categoryCounts = useMemo(() => {
     const categoryFacets = selectedRegion
-      ? selectedEmployeeRange
-        ? facets.categoriesByRegionAndEmployeeRange[selectedRegion]?.[
-            selectedEmployeeRange
-          ] ?? []
-        : facets.categoriesByRegion[selectedRegion] ?? []
-      : selectedEmployeeRange
-        ? facets.categoriesByEmployeeRange[selectedEmployeeRange] ?? []
+      ? selectedEmployeeRanges.length > 0
+        ? mergeCategoryFacetCounts(
+            selectedEmployeeRanges.map(
+              (employeeRange) =>
+                facets.categoriesByRegionAndEmployeeRange[selectedRegion]?.[
+                  employeeRange
+                ] ?? [],
+            ),
+          )
+        : (facets.categoriesByRegion[selectedRegion] ?? [])
+      : selectedEmployeeRanges.length > 0
+        ? mergeCategoryFacetCounts(
+            selectedEmployeeRanges.map(
+              (employeeRange) =>
+                facets.categoriesByEmployeeRange[employeeRange] ?? [],
+            ),
+          )
         : facets.categories;
 
     return new Map(categoryFacets.map((facet) => [facet.value, facet.count]));
@@ -127,7 +172,7 @@ export function CompanyFilterSidebar({
     facets.categoriesByEmployeeRange,
     facets.categoriesByRegion,
     facets.categoriesByRegionAndEmployeeRange,
-    selectedEmployeeRange,
+    selectedEmployeeRanges,
     selectedRegion,
   ]);
 
@@ -153,18 +198,24 @@ export function CompanyFilterSidebar({
     setSelectedCategories([]);
   }
 
-  function updateEmployeeRange(nextEmployeeRange: CompanyEmployeeRange | "") {
-    if (nextEmployeeRange === selectedEmployeeRange) {
-      return;
-    }
+  function toggleEmployeeRange(employeeRange: CompanyEmployeeRange) {
+    const nextEmployeeRanges = sortEmployeeRanges(
+      selectedEmployeeRanges.includes(employeeRange)
+        ? selectedEmployeeRanges.filter((value) => value !== employeeRange)
+        : [...selectedEmployeeRanges, employeeRange],
+    );
 
-    setSelectedEmployeeRange(nextEmployeeRange);
+    setSelectedEmployeeRanges(nextEmployeeRanges);
+  }
+
+  function resetEmployeeRanges() {
+    setSelectedEmployeeRanges([]);
   }
 
   function resetDraftFilters() {
     setSelectedRegion("");
     setSelectedCategories([]);
-    setSelectedEmployeeRange("");
+    setSelectedEmployeeRanges([]);
   }
 
   function applyDraftFilters() {
@@ -175,7 +226,7 @@ export function CompanyFilterSidebar({
     const href = createCompanySearchHref(filters, {
       region: selectedRegion,
       categories: selectedCategories,
-      employeeRange: selectedEmployeeRange,
+      employeeRanges: selectedEmployeeRanges,
       page: 1,
     });
 
@@ -260,7 +311,11 @@ export function CompanyFilterSidebar({
             <MapPin className="size-4 text-slate-500" aria-hidden="true" />
             <span>지역</span>
           </div>
-          <div role="radiogroup" aria-label="지역" className="grid grid-cols-4 gap-2">
+          <div
+            role="radiogroup"
+            aria-label="지역"
+            className="grid grid-cols-4 gap-2"
+          >
             {regionOptions.map((option) => {
               const checked = selectedRegion === option.value;
 
@@ -305,9 +360,15 @@ export function CompanyFilterSidebar({
                 {selectedCategories.length}개 선택
               </span>
               {isIndustryFilterOpen ? (
-                <ChevronDown className="size-4 text-slate-600" aria-hidden="true" />
+                <ChevronDown
+                  className="size-4 text-slate-600"
+                  aria-hidden="true"
+                />
               ) : (
-                <ChevronRight className="size-4 text-slate-600" aria-hidden="true" />
+                <ChevronRight
+                  className="size-4 text-slate-600"
+                  aria-hidden="true"
+                />
               )}
             </span>
           </button>
@@ -379,15 +440,20 @@ export function CompanyFilterSidebar({
                 {selectedEmployeeRangeLabel}
               </span>
               {isEmployeeFilterOpen ? (
-                <ChevronDown className="size-4 text-slate-600" aria-hidden="true" />
+                <ChevronDown
+                  className="size-4 text-slate-600"
+                  aria-hidden="true"
+                />
               ) : (
-                <ChevronRight className="size-4 text-slate-600" aria-hidden="true" />
+                <ChevronRight
+                  className="size-4 text-slate-600"
+                  aria-hidden="true"
+                />
               )}
             </span>
           </button>
           <div
             id={employeeOptionsId}
-            role="radiogroup"
             aria-label="근로자수"
             className={[
               "grid grid-cols-2 gap-2",
@@ -396,12 +462,11 @@ export function CompanyFilterSidebar({
           >
             <button
               type="button"
-              role="radio"
-              aria-checked={!selectedEmployeeRange}
-              onClick={() => updateEmployeeRange("")}
+              aria-pressed={selectedEmployeeRanges.length === 0}
+              onClick={resetEmployeeRanges}
               className={[
-                "h-10 rounded-md border px-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-primary/20",
-                !selectedEmployeeRange
+                "h-10 rounded-md border px-3 text-sm text-left font-medium transition focus:outline-none focus:ring-2 focus:ring-primary/20",
+                selectedEmployeeRanges.length === 0
                   ? "border-primary bg-primary text-white"
                   : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:text-primary",
               ].join(" ")}
@@ -409,24 +474,27 @@ export function CompanyFilterSidebar({
               전체
             </button>
             {COMPANY_EMPLOYEE_RANGES.map((option) => {
-              const checked = selectedEmployeeRange === option.value;
+              const checked = selectedEmployeeRanges.includes(option.value);
 
               return (
-                <button
+                <label
                   key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={checked}
-                  onClick={() => updateEmployeeRange(option.value)}
                   className={[
-                    "h-10 rounded-md border px-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-primary/20",
+                    "flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm transition",
                     checked
                       ? "border-primary bg-primary text-white"
-                      : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:text-primary",
+                      : "border-slate-300 bg-white text-slate-700 hover:border-slate-400",
                   ].join(" ")}
                 >
-                  {option.label}
-                </button>
+                  <span className="min-w-0 truncate">{option.label}</span>
+                  <input
+                    type="checkbox"
+                    value={option.value}
+                    checked={checked}
+                    onChange={() => toggleEmployeeRange(option.value)}
+                    className="size-4 accent-primary"
+                  />
+                </label>
               );
             })}
           </div>
