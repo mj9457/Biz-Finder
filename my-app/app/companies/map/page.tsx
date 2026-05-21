@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import headerLogo from "@/public/logo-white-header.png";
 
 import { CompanyMapDashboard } from "@/features/companies/components/company-map-dashboard";
 import { getCompanyMapData } from "@/features/companies/lib/map-data";
@@ -32,13 +33,12 @@ export default async function CompanyMapPage() {
             </Link>
             <Link href="/companies" className="flex min-w-0 flex-col">
               <Image
-                src="/logo-white-header.png"
+                src={headerLogo}
                 alt="경기동부상공회의소"
                 width={480}
                 height={66}
                 sizes="(min-width: 640px) 240px, 192px"
-                priority
-                unoptimized
+                preload
                 className="h-auto w-48 sm:w-60"
               />
               <span className="mt-2 text-sm font-medium leading-none text-gray-500">

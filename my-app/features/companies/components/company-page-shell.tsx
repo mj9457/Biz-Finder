@@ -5,6 +5,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { MapPin, Menu } from "lucide-react";
+import headerLogo from "@/public/logo-white-header.png";
 
 import type { CompanyFacets, CompanySearchFilters } from "../types";
 import { CompanyFilterSidebar } from "./company-filter-sidebar";
@@ -91,16 +92,13 @@ export function CompanyPageShell({
                 className="flex min-w-0 flex-col"
               >
                 <Image
-                  src="/logo-white-header.png"
+                  src={headerLogo}
                   alt="경기동부상공회의소"
                   width={480}
                   height={66}
                   sizes="(min-width: 640px) 240px, 192px"
                   preload
-                  fetchPriority="high"
-                  loading="eager"
                   decoding="sync"
-                  unoptimized
                   className="h-auto w-48 sm:w-60"
                 />
                 <span className="mt-2 text-sm font-medium leading-none text-gray-500 sm:text-sm">

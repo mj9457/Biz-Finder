@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
   );
   const companies = await getCompaniesForExport(filters);
   const csv = `\uFEFF${createCompaniesCsv(companies)}`;
-  const fileName = `companies-${new Date().toISOString().slice(0, 10)}.csv`;
+  const fileName = `gecci_companies-${new Date().toISOString().slice(0, 10)}.csv`;
 
   return new Response(csv, {
     headers: {

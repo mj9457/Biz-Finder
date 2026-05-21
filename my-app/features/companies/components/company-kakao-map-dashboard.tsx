@@ -72,12 +72,6 @@ type KakaoCustomOverlayInstance = {
   setMap: (map: KakaoMapInstance | null) => void;
 };
 
-type KakaoMarkerClustererInstance = {
-  addMarkers: (markers: KakaoMarkerInstance[]) => void;
-  clear?: () => void;
-  setMap?: (map: KakaoMapInstance | null) => void;
-};
-
 type KakaoGeocoderInstance = {
   addressSearch: (
     address: string,
@@ -111,9 +105,6 @@ type KakaoMapsInstance = {
     yAnchor?: number;
     zIndex?: number;
   }) => KakaoCustomOverlayInstance;
-  MarkerClusterer: new (
-    options: Record<string, unknown>,
-  ) => KakaoMarkerClustererInstance;
   services: {
     Geocoder: new () => KakaoGeocoderInstance;
     Status: { OK: string };
@@ -159,6 +150,15 @@ type WindowWithIdleCallback = Window & {
 
 const MAP_CENTER = { lat: 37.6906, lng: 127.2817 };
 const DEFAULT_LEVEL = 9;
+const MARKER_SVG_WIDTH = 46;
+const MARKER_SVG_HEIGHT = 62;
+const MARKER_RENDER_WIDTH = 36;
+const MARKER_RENDER_HEIGHT = 42;
+const MARKER_TIP_X = 23;
+const MARKER_TIP_Y = 53.787;
+const MARKER_ANCHOR_X = (MARKER_TIP_X / MARKER_SVG_WIDTH) * MARKER_RENDER_WIDTH;
+const MARKER_ANCHOR_Y =
+  (MARKER_TIP_Y / MARKER_SVG_HEIGHT) * MARKER_RENDER_HEIGHT;
 const KAKAO_MAP_APP_KEY =
   process.env.NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY ??
   "6e24b4d7f1dc9780c59cdbda55beb25a";
@@ -258,7 +258,7 @@ function buildMarkerSvg(point: CompanyMapPoint, selected = false) {
     .join("");
 
   return [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="46" height="62" viewBox="0 0 46 62">',
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${MARKER_SVG_WIDTH}" height="${MARKER_SVG_HEIGHT}" viewBox="0 0 ${MARKER_SVG_WIDTH} ${MARKER_SVG_HEIGHT}">`,
     `<path d=\"M23 1C12.507 1 4 9.507 4 20c0 13.832 16.613 32.2 18.078 33.787a1.3 1.3 0 0 0 1.844 0C25.387 52.2 42 33.832 42 20 42 9.507 33.493 1 23 1Z\" fill=\"${markerColor}\" stroke=\"${markerRingColor}\" stroke-width=\"3\"/>`,
     '<circle cx="23" cy="20" r="11" fill="rgba(255,255,255,0.18)" />',
     '<g transform="translate(11 8)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
@@ -276,10 +276,12 @@ function createCategoryMarkerImage(
   const imageSrc = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
     buildMarkerSvg(point, selected),
   )}`;
-  // const imageSize = new kakaoMaps.Size(46, 62);
-  const imageSize = new kakaoMaps.Size(36, 42);
+  const imageSize = new kakaoMaps.Size(
+    MARKER_RENDER_WIDTH,
+    MARKER_RENDER_HEIGHT,
+  );
   const imageOption = {
-    offset: new kakaoMaps.Point(23, 61),
+    offset: new kakaoMaps.Point(MARKER_ANCHOR_X, MARKER_ANCHOR_Y),
   };
 
   return new kakaoMaps.MarkerImage(imageSrc, imageSize, imageOption);
@@ -493,7 +495,6 @@ export function CompanyKakaoMapDashboard({
   const mapRef = useRef<KakaoMapInstance | null>(null);
   const kakaoMapsRef = useRef<KakaoMapsInstance | null>(null);
   const geocoderRef = useRef<KakaoGeocoderInstance | null>(null);
-  const clustererRef = useRef<KakaoMarkerClustererInstance | null>(null);
   const markerRegistryRef = useRef<Map<string, KakaoMarkerEntry>>(new Map());
   const selectedMarkerIdRef = useRef<string | null>(null);
   const mapIdleTimerRef = useRef<number | null>(null);
@@ -674,60 +675,6 @@ export function CompanyKakaoMapDashboard({
           level: DEFAULT_LEVEL,
         });
         const geocoder = new kakaoMaps.services.Geocoder();
-        const clusterer = new kakaoMaps.MarkerClusterer({
-          map,
-          averageCenter: true,
-          minLevel: 8,
-          disableClickZoom: false,
-          calculator: [10, 30, 100],
-          texts: (size: number) => formatNumber(size),
-          styles: [
-            {
-              width: "40px",
-              height: "40px",
-              background: "#0f172a",
-              color: "#ffffff",
-              borderRadius: "999px",
-              fontWeight: "800",
-              lineHeight: "40px",
-              textAlign: "center",
-              border: "3px solid #ffffff",
-            },
-            {
-              width: "46px",
-              height: "46px",
-              background: "#ea580c",
-              color: "#ffffff",
-              borderRadius: "999px",
-              fontWeight: "800",
-              lineHeight: "46px",
-              textAlign: "center",
-              border: "3px solid #ffffff",
-            },
-            {
-              width: "54px",
-              height: "54px",
-              background: "#dc2626",
-              color: "#ffffff",
-              borderRadius: "999px",
-              fontWeight: "800",
-              lineHeight: "54px",
-              textAlign: "center",
-              border: "3px solid #ffffff",
-            },
-            {
-              width: "60px",
-              height: "60px",
-              background: "#7c2d12",
-              color: "#ffffff",
-              borderRadius: "999px",
-              fontWeight: "800",
-              lineHeight: "60px",
-              textAlign: "center",
-              border: "3px solid #ffffff",
-            },
-          ],
-        });
 
         kakaoMaps.event.addListener(map, "idle", () => {
           if (mapIdleTimerRef.current !== null) {
@@ -745,7 +692,6 @@ export function CompanyKakaoMapDashboard({
 
         kakaoMapsRef.current = kakaoMaps;
         geocoderRef.current = geocoder;
-        clustererRef.current = clusterer;
         mapRef.current = map;
         setMapError(null);
         setIsMapReady(true);
@@ -789,10 +735,6 @@ export function CompanyKakaoMapDashboard({
         window.clearTimeout(mapIdleTimerRef.current);
         mapIdleTimerRef.current = null;
       }
-      if (clustererRef.current) {
-        clustererRef.current.clear?.();
-        clustererRef.current.setMap?.(null);
-      }
 
       for (const entry of markerRegistry.values()) {
         entry.overlay.setMap(null);
@@ -803,7 +745,6 @@ export function CompanyKakaoMapDashboard({
       mapRef.current = null;
       kakaoMapsRef.current = null;
       geocoderRef.current = null;
-      clustererRef.current = null;
       selectedMarkerIdRef.current = null;
     };
   }, [syncMapBounds, updateActiveCompanyId]);
@@ -811,9 +752,8 @@ export function CompanyKakaoMapDashboard({
   useEffect(() => {
     const kakaoMaps = kakaoMapsRef.current;
     const map = mapRef.current;
-    const clusterer = clustererRef.current;
 
-    if (!isMapReady || !kakaoMaps || !map || !clusterer) {
+    if (!isMapReady || !kakaoMaps || !map) {
       return;
     }
 
@@ -823,10 +763,7 @@ export function CompanyKakaoMapDashboard({
     }
 
     markerRegistryRef.current.clear();
-    clusterer.clear?.();
     selectedMarkerIdRef.current = null;
-
-    const markers: KakaoMarkerInstance[] = [];
 
     for (const point of mapPoints) {
       const position = new kakaoMaps.LatLng(point.lat, point.lng);
@@ -854,11 +791,7 @@ export function CompanyKakaoMapDashboard({
         overlay,
         point,
       });
-      markers.push(marker);
-    }
-
-    if (markers.length > 0) {
-      clusterer.addMarkers(markers);
+      marker.setMap(map);
     }
   }, [
     isMapReady,
