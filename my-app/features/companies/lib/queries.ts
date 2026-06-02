@@ -9,6 +9,7 @@ import {
   COMPANY_REGIONS,
   INDUSTRY_CHAMBER_CATEGORY_MAP,
 } from "../data/categories";
+import { companies as localCompanies } from "../data/companies";
 import type {
   Company,
   CompanyCategory,
@@ -105,6 +106,9 @@ const industryChamberCategoryEntries = Object.entries(
 ) as Array<[string, CompanyCategory]>;
 const companyCategorySet = new Set<string>(COMPANY_CATEGORIES);
 const companyRegionSet = new Set<string>(COMPANY_REGIONS);
+const localCompanyIndexById = new Map(
+  localCompanies.map((company, index) => [company.id, index]),
+);
 const employeeRangeMap = new Map(
   COMPANY_EMPLOYEE_RANGES.map((range) => [range.value, range]),
 );
@@ -119,6 +123,14 @@ let companiesForMapCache: {
   expiresAt: number;
 } | null = null;
 let companiesForMapPromise: Promise<Company[]> | null = null;
+let hasLoggedLocalFallback = false;
+
+type SupabaseErrorLike = {
+  message?: string | null;
+  status?: number | null;
+  statusText?: string | null;
+  code?: string | null;
+};
 
 type ChainedQuery<T> = {
   eq: (column: string, value: string) => T;
@@ -132,6 +144,94 @@ type ChainedQuery<T> = {
     options?: { ascending?: boolean; nullsFirst?: boolean },
   ) => T;
 };
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getSupabaseErrorLike(value: unknown): SupabaseErrorLike | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  return value as SupabaseErrorLike;
+}
+
+function summarizeSupabaseError(error: SupabaseErrorLike | null | undefined) {
+  if (!error) {
+    return "Unknown Supabase error";
+  }
+
+  const message = typeof error.message === "string" ? error.message.trim() : "";
+
+  if (message) {
+    const titleMatch = message.match(/<title>([^<]+)<\/title>/i);
+
+    if (titleMatch) {
+      return titleMatch[1].replace(/^supabase\.co\s+\|\s+/i, "");
+    }
+
+    return message.replace(/\s+/g, " ").slice(0, 240);
+  }
+
+  if (typeof error.status === "number") {
+    return `HTTP ${error.status}`;
+  }
+
+  return "Unknown Supabase error";
+}
+
+function isSupabaseUnavailableError(error: SupabaseErrorLike | null | undefined) {
+  if (!error) {
+    return false;
+  }
+
+  if (typeof error.status === "number" && error.status >= 500) {
+    return true;
+  }
+
+  const summary = summarizeSupabaseError(error);
+  return /fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|Web server is down/i.test(
+    summary,
+  );
+}
+
+function isUnavailableDataSourceError(error: unknown) {
+  if (isSupabaseUnavailableError(getSupabaseErrorLike(error))) {
+    return true;
+  }
+
+  if (!isObjectRecord(error) || !("cause" in error)) {
+    return false;
+  }
+
+  return isSupabaseUnavailableError(getSupabaseErrorLike(error.cause));
+}
+
+function createDataSourceError(action: string, error: SupabaseErrorLike) {
+  return Object.assign(
+    new Error(`${action}: ${summarizeSupabaseError(error)}`),
+    { cause: error },
+  );
+}
+
+function logLocalFallback(reason: unknown, context: string) {
+  if (hasLoggedLocalFallback) {
+    return;
+  }
+
+  hasLoggedLocalFallback = true;
+
+  const error =
+    getSupabaseErrorLike(reason) ??
+    getSupabaseErrorLike(
+      isObjectRecord(reason) && "cause" in reason ? reason.cause : null,
+    );
+
+  console.warn(
+    `[companies] Supabase unavailable while loading ${context}. Falling back to local data. ${summarizeSupabaseError(error)}`,
+  );
+}
 
 function splitTextList(value: string | null) {
   if (!value) {
@@ -354,6 +454,171 @@ function mapCompany(row: CompanyRow): Company {
   };
 }
 
+function getLocalCompanyIndex(company: Company) {
+  return localCompanyIndexById.get(company.id) ?? Number.MAX_SAFE_INTEGER;
+}
+
+function getPrimaryLocalCategory(company: Company) {
+  const primaryCategory = company.categories[0];
+
+  if (primaryCategory && companyCategorySet.has(primaryCategory)) {
+    return primaryCategory as CompanyCategory;
+  }
+
+  return null;
+}
+
+function createLocalFacetRows(): CompanyFacetRow[] {
+  return localCompanies.map((company) => ({
+    region: company.region,
+    primary_category: getPrimaryLocalCategory(company),
+    standard_industry: company.industry,
+    industry_chamber: company.industryChamber ?? company.industry,
+    industry_code: company.industry,
+    company_type: company.industry,
+    location: [company.region, company.district].filter(Boolean).join(" "),
+    address: company.address,
+    employee_count: company.employees,
+  }));
+}
+
+function createLocalSearchText(company: Company) {
+  return [
+    company.name,
+    company.representative,
+    company.region,
+    company.district,
+    company.industry,
+    company.industryChamber,
+    company.mainProduct,
+    company.address,
+    company.contact,
+    company.phone,
+    company.registrationNumber,
+    company.description,
+    ...company.products,
+    ...company.tags,
+    ...company.categories,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase("ko-KR");
+}
+
+function matchesLocalCategoryFilter(
+  company: Company,
+  categories: CompanySearchFilters["categories"],
+) {
+  if (categories.length === 0) {
+    return true;
+  }
+
+  const primaryCategory = getPrimaryLocalCategory(company);
+  return primaryCategory ? categories.includes(primaryCategory) : false;
+}
+
+function matchesLocalKeywordFilter(company: Company, keyword: string) {
+  if (!keyword) {
+    return true;
+  }
+
+  const safeKeyword = sanitizeKeyword(keyword);
+
+  if (!safeKeyword) {
+    return true;
+  }
+
+  if (!hasTextKeyword(safeKeyword)) {
+    return false;
+  }
+
+  return createLocalSearchText(company).includes(
+    safeKeyword.toLocaleLowerCase("ko-KR"),
+  );
+}
+
+function filterLocalCompanies(filters: CompanySearchFilters) {
+  return localCompanies.filter((company) => {
+    if (filters.region && company.region !== filters.region) {
+      return false;
+    }
+
+    if (!matchesLocalCategoryFilter(company, filters.categories)) {
+      return false;
+    }
+
+    if (
+      filters.employeeRanges.length > 0 &&
+      !filters.employeeRanges.some((employeeRange) =>
+        matchesEmployeeCountByRange(company.employees, employeeRange),
+      )
+    ) {
+      return false;
+    }
+
+    if (!matchesLocalKeywordFilter(company, filters.q)) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function compareLocalCompanies(a: Company, b: Company, filters: CompanySearchFilters) {
+  switch (filters.sort) {
+    case "name-asc":
+      return (
+        a.name.localeCompare(b.name, "ko-KR") || getLocalCompanyIndex(a) - getLocalCompanyIndex(b)
+      );
+    case "name-desc":
+      return (
+        b.name.localeCompare(a.name, "ko-KR") || getLocalCompanyIndex(a) - getLocalCompanyIndex(b)
+      );
+    case "representative-asc":
+      return (
+        a.representative.localeCompare(b.representative, "ko-KR") ||
+        a.name.localeCompare(b.name, "ko-KR") ||
+        getLocalCompanyIndex(a) - getLocalCompanyIndex(b)
+      );
+    case "representative-desc":
+      return (
+        b.representative.localeCompare(a.representative, "ko-KR") ||
+        a.name.localeCompare(b.name, "ko-KR") ||
+        getLocalCompanyIndex(a) - getLocalCompanyIndex(b)
+      );
+    default:
+      if (filters.q) {
+        return (
+          a.name.localeCompare(b.name, "ko-KR") ||
+          getLocalCompanyIndex(a) - getLocalCompanyIndex(b)
+        );
+      }
+
+      return getLocalCompanyIndex(a) - getLocalCompanyIndex(b);
+  }
+}
+
+function createLocalCompanySearchResult(
+  filters: CompanySearchFilters,
+): CompanySearchResult {
+  const items = filterLocalCompanies(filters).toSorted((a, b) =>
+    compareLocalCompanies(a, b, filters),
+  );
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / filters.pageSize));
+  const page = Math.min(filters.page, totalPages);
+  const start = (page - 1) * filters.pageSize;
+  const end = start + filters.pageSize;
+
+  return {
+    items: items.slice(start, end),
+    total,
+    page,
+    pageSize: filters.pageSize,
+    totalPages,
+  };
+}
+
 function sanitizeKeyword(value: string) {
   return value.trim().replace(/,/g, " ");
 }
@@ -505,7 +770,7 @@ async function fetchSearchPage(
   const { data, error, count } = await query;
 
   if (error) {
-    throw new Error(`Failed to search companies: ${error.message}`);
+    throw createDataSourceError("Failed to search companies", error);
   }
 
   return {
@@ -527,7 +792,7 @@ async function fetchAllRowsWithColumns<T extends object>(columns: string) {
       .range(from, to);
 
     if (error) {
-      throw new Error(`Failed to load companies: ${error.message}`);
+      throw createDataSourceError("Failed to load companies", error);
     }
 
     const chunk = (data ?? []) as unknown as T[];
@@ -690,13 +955,25 @@ function createCompanyFacets(rows: CompanyFacetRow[]): CompanyFacets {
 }
 
 async function loadCompanyDirectoryMetadata() {
-  const rows = await fetchAllRowsWithColumns<CompanyFacetRow>(
-    COMPANY_FACET_SELECT_COLUMNS,
-  );
+  try {
+    const rows = await fetchAllRowsWithColumns<CompanyFacetRow>(
+      COMPANY_FACET_SELECT_COLUMNS,
+    );
 
-  return {
-    facets: createCompanyFacets(rows),
-  };
+    return {
+      facets: createCompanyFacets(rows),
+    };
+  } catch (error) {
+    if (!isUnavailableDataSourceError(error)) {
+      throw error;
+    }
+
+    logLocalFallback(error, "directory metadata");
+
+    return {
+      facets: createCompanyFacets(createLocalFacetRows()),
+    };
+  }
 }
 
 async function getCompanyDirectoryMetadata(): Promise<CompanyDirectoryMetadata> {
@@ -723,10 +1000,19 @@ async function getCompanyDirectoryMetadata(): Promise<CompanyDirectoryMetadata> 
 }
 
 async function loadCompaniesForMap() {
-  const rows = await fetchAllRowsWithColumns<CompanyRow>(
-    COMPANY_SELECT_COLUMNS,
-  );
-  return rows.map(mapCompany);
+  try {
+    const rows = await fetchAllRowsWithColumns<CompanyRow>(
+      COMPANY_SELECT_COLUMNS,
+    );
+    return rows.map(mapCompany);
+  } catch (error) {
+    if (!isUnavailableDataSourceError(error)) {
+      throw error;
+    }
+
+    logLocalFallback(error, "map data");
+    return localCompanies;
+  }
 }
 
 async function getAllCompaniesForMap() {
@@ -755,40 +1041,49 @@ async function getAllCompaniesForMap() {
 async function createCompanySearchResult(
   filters: CompanySearchFilters,
 ): Promise<CompanySearchResult> {
-  const firstPage = await fetchSearchPage(
-    filters,
-    filters.page,
-    filters.pageSize,
-    true,
-  );
-  const total = firstPage.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / filters.pageSize));
-  const page = Math.min(filters.page, totalPages);
+  try {
+    const firstPage = await fetchSearchPage(
+      filters,
+      filters.page,
+      filters.pageSize,
+      true,
+    );
+    const total = firstPage.total ?? 0;
+    const totalPages = Math.max(1, Math.ceil(total / filters.pageSize));
+    const page = Math.min(filters.page, totalPages);
 
-  if (page === filters.page || total === 0) {
+    if (page === filters.page || total === 0) {
+      return {
+        items: firstPage.rows,
+        total,
+        page,
+        pageSize: filters.pageSize,
+        totalPages,
+      };
+    }
+
+    const correctedPage = await fetchSearchPage(
+      filters,
+      page,
+      filters.pageSize,
+      false,
+    );
+
     return {
-      items: firstPage.rows,
+      items: correctedPage.rows,
       total,
       page,
       pageSize: filters.pageSize,
       totalPages,
     };
+  } catch (error) {
+    if (!isUnavailableDataSourceError(error)) {
+      throw error;
+    }
+
+    logLocalFallback(error, "search results");
+    return createLocalCompanySearchResult(filters);
   }
-
-  const correctedPage = await fetchSearchPage(
-    filters,
-    page,
-    filters.pageSize,
-    false,
-  );
-
-  return {
-    items: correctedPage.rows,
-    total,
-    page,
-    pageSize: filters.pageSize,
-    totalPages,
-  };
 }
 
 export const searchCompanies = cache(
@@ -811,37 +1106,50 @@ export const getCompanyPageData = cache(
 
 export const getCompaniesForExport = cache(
   async (filters: CompanySearchFilters) => {
-    const firstPage = await fetchSearchPage(
-      filters,
-      1,
-      SUPABASE_BATCH_SIZE,
-      true,
-    );
-    const total = firstPage.total ?? firstPage.rows.length;
-    const pages = Math.max(1, Math.ceil(total / SUPABASE_BATCH_SIZE));
-    const items = [...firstPage.rows];
-
-    for (let currentPage = 2; currentPage <= pages; currentPage += 1) {
-      const page = await fetchSearchPage(
+    try {
+      const firstPage = await fetchSearchPage(
         filters,
-        currentPage,
+        1,
         SUPABASE_BATCH_SIZE,
-        false,
+        true,
       );
-      items.push(...page.rows);
-    }
+      const total = firstPage.total ?? firstPage.rows.length;
+      const pages = Math.max(1, Math.ceil(total / SUPABASE_BATCH_SIZE));
+      const items = [...firstPage.rows];
 
-    return items;
+      for (let currentPage = 2; currentPage <= pages; currentPage += 1) {
+        const page = await fetchSearchPage(
+          filters,
+          currentPage,
+          SUPABASE_BATCH_SIZE,
+          false,
+        );
+        items.push(...page.rows);
+      }
+
+      return items;
+    } catch (error) {
+      if (!isUnavailableDataSourceError(error)) {
+        throw error;
+      }
+
+      logLocalFallback(error, "export data");
+
+      return filterLocalCompanies(filters).toSorted((a, b) =>
+        compareLocalCompanies(a, b, filters),
+      );
+    }
   },
 );
 
 export const getCompaniesForMap = cache(async () => getAllCompaniesForMap());
 
 export const getCompanyById = cache(async (id: string) => {
+  const localCompany = localCompanies.find((company) => company.id === id) ?? null;
   const numericId = Number(id);
 
   if (!Number.isFinite(numericId)) {
-    return null;
+    return localCompany;
   }
 
   const { data, error } = await supabase
@@ -851,11 +1159,16 @@ export const getCompanyById = cache(async (id: string) => {
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to get company by id: ${error.message}`);
+    if (isSupabaseUnavailableError(error)) {
+      logLocalFallback(error, `company detail (${id})`);
+      return localCompany;
+    }
+
+    throw createDataSourceError("Failed to get company by id", error);
   }
 
   if (!data) {
-    return null;
+    return localCompany;
   }
 
   return mapCompany(data as unknown as CompanyRow);

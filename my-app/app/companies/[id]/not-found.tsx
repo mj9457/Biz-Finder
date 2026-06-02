@@ -1,22 +1,14 @@
-import Link from "next/link";
+import { CompanyNotFoundPage } from "@/features/companies/components/company-not-found-page";
 
 export default function NotFound() {
   return (
-    <div className="mx-auto grid min-h-[60vh] w-full max-w-2xl place-items-center px-5 py-16 text-center sm:px-8">
-      <section className="rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-950">
-          기업 정보를 찾을 수 없습니다
-        </h1>
-        <p className="mt-3 text-sm leading-6 text-slate-600">
-          요청한 기업이 삭제되었거나 잘못된 주소로 접근했습니다.
-        </p>
-        <Link
-          href="/companies"
-          className="mt-6 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          검색 목록으로 이동
-        </Link>
-      </section>
-    </div>
+    <CompanyNotFoundPage
+      title="기업 정보를 찾을 수 없습니다."
+      description="요청하신 기업이 삭제되었거나 잘못된 주소로 접속하셨습니다. 문제가 계속되면 아래 연락처로 문의해 주세요."
+      primaryHref="/companies"
+      primaryLabel="기업 목록으로 이동"
+      secondaryHref="/companies/map"
+      secondaryLabel="지도 대시보드로 이동"
+    />
   );
 }

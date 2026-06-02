@@ -15,7 +15,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import type {
   LayerGroup,
   Map as LeafletMap,
@@ -36,6 +36,7 @@ type LeafletNamespace = typeof import("leaflet");
 
 const MAP_CENTER: [number, number] = [37.6906, 127.2817];
 const DEFAULT_ZOOM = 10;
+const MOBILE_SWIPE_THRESHOLD = 40;
 
 const REGION_OUTLINE_COLORS: Record<string, string> = {
   남양주: "#0ea5e9",
@@ -221,6 +222,9 @@ export function CompanyMapDashboard({
   const clusterLayerRef = useRef<MarkerClusterGroup | null>(null);
   const regionOutlineLayerRef = useRef<LayerGroup | null>(null);
   const leafletRef = useRef<LeafletNamespace | null>(null);
+  const mobileSheetTouchStartYRef = useRef<number | null>(null);
+  const mobileSheetTouchDeltaYRef = useRef(0);
+  const ignoreNextMobileSheetToggleClickRef = useRef(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const [activeRegion, setActiveRegion] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -538,6 +542,62 @@ export function CompanyMapDashboard({
     });
   }
 
+  function toggleMobileCompanyList() {
+    if (ignoreNextMobileSheetToggleClickRef.current) {
+      ignoreNextMobileSheetToggleClickRef.current = false;
+      return;
+    }
+
+    setIsCompanyListOpen((current) => !current);
+  }
+
+  function handleMobileSheetTouchStart(
+    event: TouchEvent<HTMLButtonElement>,
+  ) {
+    if (event.touches.length !== 1) {
+      return;
+    }
+
+    mobileSheetTouchStartYRef.current = event.touches[0]?.clientY ?? null;
+    mobileSheetTouchDeltaYRef.current = 0;
+  }
+
+  function handleMobileSheetTouchMove(event: TouchEvent<HTMLButtonElement>) {
+    const startY = mobileSheetTouchStartYRef.current;
+
+    if (startY === null || event.touches.length !== 1) {
+      return;
+    }
+
+    const currentY = event.touches[0]?.clientY ?? startY;
+    mobileSheetTouchDeltaYRef.current = currentY - startY;
+  }
+
+  function handleMobileSheetTouchEnd() {
+    const deltaY = mobileSheetTouchDeltaYRef.current;
+
+    mobileSheetTouchStartYRef.current = null;
+    mobileSheetTouchDeltaYRef.current = 0;
+
+    if (Math.abs(deltaY) < MOBILE_SWIPE_THRESHOLD) {
+      return;
+    }
+
+    ignoreNextMobileSheetToggleClickRef.current = true;
+
+    if (deltaY < 0) {
+      setIsCompanyListOpen(true);
+      return;
+    }
+
+    setIsCompanyListOpen(false);
+  }
+
+  function handleMobileSheetTouchCancel() {
+    mobileSheetTouchStartYRef.current = null;
+    mobileSheetTouchDeltaYRef.current = 0;
+  }
+
   return (
     <section className="grid min-h-[calc(100vh-150px)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
       <div className="min-w-0 overflow-hidden bg-white shadow-sm md:rounded-lg md:border md:border-slate-200 xl:order-2">
@@ -771,12 +831,17 @@ export function CompanyMapDashboard({
               <div className="flex h-full flex-col">
                 <button
                   type="button"
-                  onClick={() => setIsCompanyListOpen((current) => !current)}
+                  onClick={toggleMobileCompanyList}
+                  onTouchStart={handleMobileSheetTouchStart}
+                  onTouchMove={handleMobileSheetTouchMove}
+                  onTouchEnd={handleMobileSheetTouchEnd}
+                  onTouchCancel={handleMobileSheetTouchCancel}
                   aria-expanded={isCompanyListOpen}
                   aria-label={
                     isCompanyListOpen ? "기업 목록 접기" : "기업 목록 펼치기"
                   }
                   className="grid gap-1 border-b border-slate-200 px-3 py-2 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  style={{ touchAction: "pan-y" }}
                 >
                   <span className="mx-auto h-1.5 w-10 rounded-full bg-slate-300" />
                   <span className="inline-flex items-center justify-between gap-3">
@@ -826,7 +891,13 @@ export function CompanyMapDashboard({
                   </div>
                 ) : null}
                 {isCompanyListOpen ? (
-                  <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                  <div
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2"
+                    style={{
+                      touchAction: "pan-y",
+                      WebkitOverflowScrolling: "touch",
+                    }}
+                  >
                     {visibleCompanyList.length > 0 ? (
                       <ul className="grid gap-2">
                         {visibleCompanyList.map((company) => {
