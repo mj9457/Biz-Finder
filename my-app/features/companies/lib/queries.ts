@@ -65,7 +65,8 @@ type CompanyDirectoryMetadata = {
 
 const COMPANY_CACHE_REVALIDATE_SECONDS = 300;
 const COMPANY_CACHE_REVALIDATE_MS = COMPANY_CACHE_REVALIDATE_SECONDS * 1000;
-const SUPABASE_BATCH_SIZE = 2_000;
+// Keep pagination below the common Supabase max rows per request limit.
+const SUPABASE_BATCH_SIZE = 500;
 const COMPANY_SELECT_COLUMNS = [
   "id",
   "business_number",

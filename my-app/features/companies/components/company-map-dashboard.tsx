@@ -173,13 +173,9 @@ function matchesSearch(point: CompanyMapPoint, query: string) {
 
   return [
     point.name,
-    point.region,
-    point.district,
+    point.mainProduct,
     point.industry,
     point.industryChamber ?? "",
-    point.mainProduct,
-    point.address,
-    point.phone,
     ...point.categories,
   ]
     .join(" ")
@@ -1003,7 +999,7 @@ export function CompanyMapDashboard({
                     setQuery(event.target.value);
                     setActiveCompanyId(null);
                   }}
-                  placeholder="기업명, 주소, 주요품목"
+                  placeholder="기업명, 주요품목, 업종"
                   className="h-11 min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
                 />
                 {query ? (

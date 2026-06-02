@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { PwaInstallPrompt } from "@/features/pwa/components/pwa-install-prompt";
 
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
@@ -19,6 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  applicationName: "경기동부상공회의소 회원사 검색 서비스",
   title: {
     default: "경기동부상공회의소 회원사 검색 서비스",
     template: "%s | 경기동부상공회의소",
@@ -31,6 +33,11 @@ export const metadata: Metadata = {
       "경기동부상공회의소 회원사를 통합 검색어, 지역, 업종 조건으로 검색할 수 있는 서비스입니다.",
     type: "website",
     locale: "ko_KR",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "회원사 검색",
   },
   manifest: "/favicon/manifest.json",
   icons: {
@@ -166,6 +173,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  themeColor: "#007fff",
 };
 
 export default async function RootLayout({
@@ -180,6 +188,7 @@ export default async function RootLayout({
     >
       <body className="min-h-full bg-slate-50 text-slate-950">
         {children}
+        <PwaInstallPrompt />
         <Analytics />
         <SpeedInsights />
       </body>

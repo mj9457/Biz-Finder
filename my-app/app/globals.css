@@ -202,11 +202,12 @@ body {
 }
 
 .bf-kakao-overlay {
+  display: inline-block;
   position: relative;
-  bottom: 60px;
-  right: 5px;
   width: max-content;
   max-width: min(84vw, 320px);
+  /* padding-bottom: 12px; */
+  bottom: 50px;
 }
 
 .bf-kakao-overlay__card {

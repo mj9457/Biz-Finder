@@ -102,6 +102,7 @@ type KakaoMapsInstance = {
   CustomOverlay: new (options: {
     content: string | HTMLElement;
     position: KakaoLatLng;
+    xAnchor?: number;
     yAnchor?: number;
     zIndex?: number;
   }) => KakaoCustomOverlayInstance;
@@ -345,13 +346,9 @@ function matchesSearch(point: CompanyMapPoint, query: string) {
 
   return [
     point.name,
-    point.region,
-    point.district,
+    point.mainProduct,
     point.industry,
     point.industryChamber ?? "",
-    point.mainProduct,
-    point.address,
-    point.phone,
     ...point.categories,
   ]
     .join(" ")
@@ -500,8 +497,6 @@ export function CompanyKakaoMapDashboard({
   const mapIdleTimerRef = useRef<number | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [addressQuery, setAddressQuery] = useState("");
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
   const [activeRegion, setActiveRegion] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -776,7 +771,8 @@ export function CompanyKakaoMapDashboard({
       const overlay = new kakaoMaps.CustomOverlay({
         content: overlayContent,
         position,
-        yAnchor: 1.26,
+        xAnchor: 0.5,
+        yAnchor: 1,
         zIndex: 8,
       });
 
@@ -908,44 +904,6 @@ export function CompanyKakaoMapDashboard({
     syncMapBounds(map);
   }
 
-  function searchByAddress() {
-    const kakaoMaps = kakaoMapsRef.current;
-    const map = mapRef.current;
-    const geocoder = geocoderRef.current;
-    const normalizedAddress = addressQuery.trim();
-
-    if (!kakaoMaps || !map || !geocoder || !normalizedAddress) {
-      return;
-    }
-
-    setSearchError(null);
-
-    geocoder.addressSearch(
-      normalizedAddress,
-      (result: Array<{ x: string; y: string }>, status: string) => {
-        if (status !== kakaoMaps.services.Status.OK || result.length === 0) {
-          setSearchError("주소 검색 결과가 없습니다.");
-          return;
-        }
-
-        const coordinate = result[0];
-        const target = new kakaoMaps.LatLng(
-          Number(coordinate.y),
-          Number(coordinate.x),
-        );
-
-        map.setCenter(target);
-
-        if (map.getLevel() > 4) {
-          map.setLevel(4);
-        }
-
-        setSearchError(null);
-        syncMapBounds(map);
-      },
-    );
-  }
-
   return (
     <section className="grid min-h-[calc(100vh-150px)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
       <div className="min-w-0 overflow-hidden bg-white shadow-sm md:rounded-lg md:border md:border-slate-200 xl:order-2">
@@ -1006,11 +964,6 @@ export function CompanyKakaoMapDashboard({
           ) : !isMapReady ? (
             <div className="absolute inset-0 z-[500] grid place-items-center bg-white/80 text-sm font-semibold text-slate-700">
               지도 불러오는 중
-            </div>
-          ) : null}
-          {searchError ? (
-            <div className="absolute left-4 top-4 z-[560] max-w-[calc(100%-32px)] rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 shadow">
-              {searchError}
             </div>
           ) : null}
           <div
@@ -1356,7 +1309,7 @@ export function CompanyKakaoMapDashboard({
                       event.preventDefault();
                     }
                   }}
-                  placeholder="기업명, 주소, 주요품목"
+                  placeholder="기업명, 주요품목, 업종"
                   className="h-11 min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
                 />
                 {queryInput ? (
@@ -1375,38 +1328,6 @@ export function CompanyKakaoMapDashboard({
                   className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   검색
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:p-3">
-              <label
-                htmlFor="company-map-address-search"
-                className="text-sm font-semibold text-slate-800"
-              >
-                주소 검색
-              </label>
-              <div className="mt-2 flex min-w-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
-                <MapPin className="size-4 shrink-0 text-slate-400" />
-                <input
-                  id="company-map-address-search"
-                  value={addressQuery}
-                  onChange={(event) => setAddressQuery(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      searchByAddress();
-                    }
-                  }}
-                  placeholder="예: 경기 남양주시 다산동"
-                  className="h-11 min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                />
-                <button
-                  type="button"
-                  onClick={searchByAddress}
-                  className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  이동
                 </button>
               </div>
             </div>
