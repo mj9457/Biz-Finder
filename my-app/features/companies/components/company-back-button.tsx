@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 const COMPANY_LIST_PATH = "/companies";
@@ -35,10 +36,10 @@ export function CompanyBackButton() {
 
         router.push(COMPANY_LIST_PATH);
       }}
-      className="inline-flex h-10 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+      className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary hover:shadow-sm"
     >
+      <ChevronLeft className="size-4" aria-hidden="true" />
       목록으로
     </button>
   );
 }
-

@@ -84,10 +84,14 @@ export function CompanyList({ result, filters }: CompanyListProps) {
 
   return (
     <section className="grid min-w-0 gap-4">
-      <div className="flex min-w-0 max-w-[calc(100vw-40px)] flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:max-w-none xl:flex-row xl:items-start xl:justify-between">
-        <CompanyKeywordSearch key={`search-${filters.q}`} filters={filters} />
-        <div className="flex min-w-0 w-full flex-col gap-3 sm:flex-row sm:items-start sm:justify-end xl:w-auto">
+      <div className="grid min-w-0 max-w-[calc(100vw-40px)] grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:max-w-none sm:grid-cols-2 xl:flex xl:items-center xl:justify-between">
+        <div className="min-w-0 sm:col-span-2 xl:col-span-1 xl:flex-1">
+          <CompanyKeywordSearch key={`search-${filters.q}`} filters={filters} />
+        </div>
+        <div className="sm:justify-self-start xl:shrink-0">
           <CompanyCsvDownload filters={filters} />
+        </div>
+        <div className="sm:justify-self-end xl:shrink-0">
           <CompanyViewToggle filters={filters} />
         </div>
       </div>

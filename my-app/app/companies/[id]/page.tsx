@@ -19,7 +19,8 @@ export async function generateMetadata({
 
   if (!company) {
     return {
-      title: "기업 정보를 찾을 수 없음",
+      title: "기업 상세정보를 찾을 수 없음",
+      description: "요청하신 기업 정보를 찾을 수 없습니다.",
     };
   }
 
@@ -40,8 +41,8 @@ export default async function CompanyDetailPage({
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-7xl gap-5 px-5 py-6 sm:px-8">
-      <div>
+    <div className="mx-auto w-full max-w-7xl px-5 py-6 sm:px-8 lg:py-8">
+      <div className="mb-4">
         <CompanyBackButton />
       </div>
       <CompanyDetail company={company} />
