@@ -248,7 +248,7 @@ export function CompanyFilterSidebar({
     >
       <div
         className={[
-          "flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-5 lg:px-6",
+          "flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-4",
           isCollapsed ? "lg:justify-center lg:px-2" : "",
         ].join(" ")}
       >
@@ -293,9 +293,7 @@ export function CompanyFilterSidebar({
 
       {isCollapsed ? (
         <div className="hidden py-4 lg:flex lg:flex-col lg:items-center">
-          <span className="text-xs font-semibold text-slate-500 [writing-mode:vertical-rl]">
-            필터
-          </span>
+          <span className="text-xs font-semibold text-slate-500">필터</span>
         </div>
       ) : null}
 

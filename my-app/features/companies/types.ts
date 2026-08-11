@@ -35,6 +35,7 @@ export type Company = {
   contact: string;
   phone: string;
   website?: string;
+  imageUrl?: string;
   latitude?: number;
   longitude?: number;
   description: string;
