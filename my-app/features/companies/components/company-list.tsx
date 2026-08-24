@@ -19,6 +19,7 @@ import { CompanyCsvDownload } from "./company-csv-download";
 import { CompanyKeywordSearch } from "./company-keyword-search";
 import { CompanyTable } from "./company-table";
 import { CompanyViewToggle } from "./company-view-toggle";
+import { CompanySortControl } from "./company-sort-control";
 
 type CompanyListProps = {
   result: CompanySearchResult;
@@ -29,6 +30,8 @@ function EmptyCompanyResult({ filters }: { filters: CompanySearchFilters }) {
   const resetHref = createCompanySearchHref(filters, {
     q: "",
     region: "",
+    executiveOnly: false,
+    executiveRoles: [],
     categories: [],
     employeeRanges: [],
   });
@@ -93,6 +96,9 @@ export function CompanyList({ result, filters }: CompanyListProps) {
         </div>
         <div className="sm:justify-self-end xl:shrink-0">
           <CompanyViewToggle filters={filters} />
+        </div>
+        <div className="sm:col-span-2 xl:col-span-1 xl:shrink-0">
+          <CompanySortControl filters={filters} />
         </div>
       </div>
 

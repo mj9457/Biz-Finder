@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import type { CompanyListItem } from "../types";
 import { CompanyCard } from "./company-card";
+import { getCompanyHref as getSeoCompanyHref } from "../lib/urls";
 
 export type CompanyCardListProps = {
   companies: CompanyListItem[];
@@ -12,7 +13,7 @@ export type CompanyCardListProps = {
 export function CompanyCardList({
   companies,
   emptyState,
-  getCompanyHref = (company) => `/companies/${company.id}`,
+  getCompanyHref = (company) => getSeoCompanyHref(company),
 }: CompanyCardListProps) {
   if (companies.length === 0) {
     return emptyState ?? null;

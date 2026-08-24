@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { PwaInstallPrompt } from "@/features/pwa/components/pwa-install-prompt";
+import { StructuredData } from "@/features/seo/components/structured-data";
+import { absoluteUrl, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
 
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
@@ -20,20 +22,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  applicationName: "경기동부상공회의소 회원사 검색 서비스",
+  metadataBase: new URL(SITE_URL),
+  applicationName: SITE_TITLE,
   title: {
-    default: "경기동부상공회의소 회원사 검색 서비스",
-    template: "%s | 경기동부상공회의소",
+    default: SITE_TITLE,
+    template: `%s | ${SITE_NAME}`,
   },
   description:
-    "경기동부상공회의소 회원사를 통합 검색어, 지역, 업종 조건으로 검색할 수 있는 회원사 검색 서비스입니다.",
+    "경기동부상공회의소 회원사를 기업명, 지역, 업종, 주요 품목으로 검색하고 기업별 상세 정보를 확인할 수 있는 회원사 검색 서비스입니다.",
   openGraph: {
-    title: "경기동부상공회의소 회원사 검색 서비스",
+    title: SITE_TITLE,
     description:
-      "경기동부상공회의소 회원사를 통합 검색어, 지역, 업종 조건으로 검색할 수 있는 서비스입니다.",
+      "남양주·구리·가평 지역 기업과 경기동부상공회의소 회원사의 업종, 주소, 연락처, 주요 품목 정보를 검색할 수 있습니다.",
     type: "website",
     locale: "ko_KR",
+    url: SITE_URL,
+    images: [{ url: "/logo.png", alt: `${SITE_NAME} 로고` }],
   },
+  twitter: { card: "summary_large_image" },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -187,6 +193,30 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-slate-50 text-slate-950">
+        <StructuredData
+          data={{
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "Organization",
+                name: SITE_NAME,
+                url: absoluteUrl("/companies"),
+                logo: absoluteUrl("/logo.png"),
+              },
+              {
+                "@type": "WebSite",
+                name: SITE_TITLE,
+                url: absoluteUrl("/companies"),
+                inLanguage: "ko-KR",
+                potentialAction: {
+                  "@type": "SearchAction",
+                  target: `${SITE_URL}/companies?q={search_term_string}`,
+                  "query-input": "required name=search_term_string",
+                },
+              },
+            ],
+          }}
+        />
         {children}
         <PwaInstallPrompt />
         <Analytics />

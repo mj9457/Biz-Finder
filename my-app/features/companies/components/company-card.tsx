@@ -2,7 +2,9 @@ import Link from "next/link";
 
 import { formatEmployees } from "@/lib/format";
 import type { CompanyListItem } from "../types";
+import { getCompanyHref } from "../lib/urls";
 import { CategoryBadge } from "./category-badge";
+import { ExecutiveBadges } from "./executive-badge";
 
 export type CompanyCardProps = {
   company: CompanyListItem;
@@ -11,18 +13,21 @@ export type CompanyCardProps = {
 
 export function CompanyCard({
   company,
-  href = `/companies/${company.id}`,
+  href = getCompanyHref(company),
 }: CompanyCardProps) {
   return (
     <li className="group min-w-0 rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/5 hover:shadow-lg focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
       <div className="flex min-h-full flex-col">
         <div className="min-w-0">
-          <Link
-            href={href}
-            className="break-words text-lg font-semibold text-slate-950 transition group-hover:text-primary"
-          >
-            {company.name}
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={href}
+              className="break-words text-lg font-semibold text-slate-950 transition group-hover:text-primary"
+            >
+              {company.name}
+            </Link>
+            <ExecutiveBadges executive={company.executive} />
+          </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {company.categories.map((category) => (
               <CategoryBadge

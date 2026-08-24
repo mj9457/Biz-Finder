@@ -22,6 +22,7 @@ import { formatEmployees } from "@/lib/format";
 import type { Company } from "../types";
 import { CategoryBadge } from "./category-badge";
 import { CompanyLocationMap } from "./company-location-map";
+import { ExecutiveBadges, MemberBadge } from "./executive-badge";
 
 type CompanyDetailProps = {
   company: Company;
@@ -162,18 +163,27 @@ export function CompanyDetail({ company }: CompanyDetailProps) {
         />
 
         <div className="relative">
-          <div className="flex flex-wrap items-center gap-2">
-            {categoryChips.length > 0 ? (
-              categoryChips.map((category) => (
-                <CategoryBadge key={category} category={category} />
-              ))
-            ) : (
-              <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-                분류 정보 없음
-              </span>
-            )}
+          <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {categoryChips.length > 0 ? (
+                categoryChips.map((category) => (
+                  <CategoryBadge key={category} category={category} />
+                ))
+              ) : (
+                <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                  분류 정보 없음
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {company.executive?.trim() ? (
+                <ExecutiveBadges executive={company.executive} />
+              ) : (
+                <MemberBadge />
+              )}
+            </div>{" "}
           </div>
-          <h1 className="mt-4 break-words text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
+          <h1 className="mt-3 break-words text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
             {company.name}
           </h1>
         </div>
@@ -282,7 +292,7 @@ export function CompanyDetail({ company }: CompanyDetailProps) {
           title="기업 소개"
           description="기업의 핵심 개요를 상세히 확인하세요."
         >
-          <div className="mt-auto rounded-2xl border border-sky-100 bg-sky-50 p-5">
+          <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50 p-5">
             <p className="text-sm font-semibold text-primary">주요 제품</p>
             <p className="mt-3 text-sm leading-6 text-slate-700">
               {company.mainProduct}
@@ -295,7 +305,7 @@ export function CompanyDetail({ company }: CompanyDetailProps) {
           title="주요 제품 / 서비스"
           description="회사에서 제공하는 제품과 서비스 목록입니다."
         >
-          <div className="mt-auto flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             {productChips.length > 0 ? (
               productChips.map((product) => (
                 <span
@@ -318,7 +328,7 @@ export function CompanyDetail({ company }: CompanyDetailProps) {
           title="핵심 키워드"
           description="검색과 분류에 활용되는 태그입니다."
         >
-          <div className="mt-auto flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             {tagChips.length > 0 ? (
               tagChips.map((tag) => (
                 <span

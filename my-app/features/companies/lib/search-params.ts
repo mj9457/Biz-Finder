@@ -4,6 +4,10 @@ import {
   COMPANY_REGIONS,
   COMPANY_SORTS,
 } from "../data/categories";
+import {
+  COMPANY_EXECUTIVE_ROLES,
+  type CompanyExecutiveRole,
+} from "../data/executive-roles";
 import type {
   CompanyCategory,
   CompanyEmployeeRange,
@@ -23,6 +27,7 @@ const DEFAULT_CARD_PAGE_SIZE = 6;
 export const DEFAULT_COMPANY_VIEW: CompanyView = "table";
 
 const categorySet = new Set<string>(COMPANY_CATEGORIES);
+const executiveRoleSet = new Set<string>(COMPANY_EXECUTIVE_ROLES);
 const employeeRangeSet = new Set<string>(
   COMPANY_EMPLOYEE_RANGES.map((range) => range.value),
 );
@@ -54,6 +59,24 @@ function parseCategories(value: string | string[] | undefined) {
 function parseRegion(value: string | string[] | undefined) {
   const region = compactText(value);
   return regionSet.has(region) ? (region as CompanyRegion) : "";
+}
+
+function parseExecutiveOnly(value: string | string[] | undefined) {
+  return ["1", "true", "yes"].includes(firstValue(value).toLowerCase());
+}
+
+function parseExecutiveRoles(value: string | string[] | undefined) {
+  const roles: CompanyExecutiveRole[] = [];
+
+  for (const role of values(value)) {
+    const normalizedRole = role.trim();
+
+    if (executiveRoleSet.has(normalizedRole)) {
+      roles.push(normalizedRole as CompanyExecutiveRole);
+    }
+  }
+
+  return [...new Set(roles)];
 }
 
 function parseEmployeeRanges(value: string | string[] | undefined) {
@@ -103,6 +126,7 @@ export function parseCompanySearchParams(
   params: RawSearchParams,
 ): CompanySearchFilters {
   const view = parseView(params.view);
+  const executiveRoles = parseExecutiveRoles(params.executiveRole);
 
   return {
     q:
@@ -111,6 +135,10 @@ export function parseCompanySearchParams(
       compactText(params.representative) ||
       compactText(params.product),
     region: parseRegion(params.region),
+    executiveOnly:
+      parseExecutiveOnly(params.executive ?? params.execultive) ||
+      executiveRoles.length > 0,
+    executiveRoles,
     categories: parseCategories(params.category),
     employeeRanges: parseEmployeeRanges(params.employees),
     sort: parseSort(params.sort),
@@ -149,6 +177,10 @@ function appendCompanyFilterParams(
 ) {
   if (filters.q) params.set("q", filters.q);
   if (filters.region) params.set("region", filters.region);
+  if (filters.executiveOnly) params.set("executive", "1");
+  for (const executiveRole of filters.executiveRoles) {
+    params.append("executiveRole", executiveRole);
+  }
   for (const category of filters.categories) {
     params.append("category", category);
   }
@@ -170,6 +202,8 @@ export function hasActiveCompanyFilters(filters: CompanySearchFilters) {
   return Boolean(
     filters.q ||
       filters.region ||
+      filters.executiveOnly ||
+      filters.executiveRoles.length > 0 ||
       filters.employeeRanges.length > 0 ||
       filters.categories.length > 0,
   );

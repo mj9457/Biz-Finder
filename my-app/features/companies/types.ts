@@ -4,6 +4,7 @@ import type {
   COMPANY_REGIONS,
   COMPANY_SORTS,
 } from "./data/categories";
+import type { CompanyExecutiveRole } from "./data/executive-roles";
 
 export type CompanyCategory = (typeof COMPANY_CATEGORIES)[number];
 
@@ -20,6 +21,7 @@ export type Company = {
   id: string;
   name: string;
   representative: string;
+  executive?: string;
   region: string;
   district: string;
   industry: string;
@@ -47,6 +49,7 @@ export type CompanyListItem = Pick<
   | "id"
   | "name"
   | "representative"
+  | "executive"
   | "region"
   | "district"
   | "industry"
@@ -60,6 +63,8 @@ export type CompanyListItem = Pick<
 export type CompanySearchFilters = {
   q: string;
   region: CompanyRegion | "";
+  executiveOnly: boolean;
+  executiveRoles: CompanyExecutiveRole[];
   categories: CompanyCategory[];
   employeeRanges: CompanyEmployeeRange[];
   sort: CompanySort;
@@ -75,6 +80,30 @@ export type CompanyFacetOption = {
 
 export type CompanyFacets = {
   regions: CompanyFacetOption[];
+  executiveCount: number;
+  executiveCountByRegion: Partial<Record<CompanyRegion, number>>;
+  executiveCountByEmployeeRange: Partial<
+    Record<CompanyEmployeeRange, number>
+  >;
+  executiveCountByRegionAndEmployeeRange: Partial<
+    Record<CompanyRegion, Partial<Record<CompanyEmployeeRange, number>>>
+  >;
+  executiveRoles: CompanyFacetOption[];
+  executiveRolesByRegion: Partial<
+    Record<CompanyRegion, CompanyFacetOption[]>
+  >;
+  executiveRolesByEmployeeRange: Partial<
+    Record<CompanyEmployeeRange, CompanyFacetOption[]>
+  >;
+  executiveRolesByRegionAndEmployeeRange: Partial<
+    Record<
+      CompanyRegion,
+      Partial<Record<CompanyEmployeeRange, CompanyFacetOption[]>>
+    >
+  >;
+  filteredCategoryCounts: CompanyFacetOption[];
+  filteredExecutiveRoleCounts: CompanyFacetOption[];
+  filteredExecutiveCount: number;
   industries: CompanyFacetOption[];
   categories: CompanyFacetOption[];
   categoriesByRegion: Partial<Record<CompanyRegion, CompanyFacetOption[]>>;
@@ -87,6 +116,20 @@ export type CompanyFacets = {
       Partial<Record<CompanyEmployeeRange, CompanyFacetOption[]>>
     >
   >;
+  categoriesByExecutive: CompanyFacetOption[];
+  categoriesByRegionAndExecutive: Partial<
+    Record<CompanyRegion, CompanyFacetOption[]>
+  >;
+  categoriesByEmployeeRangeAndExecutive: Partial<
+    Record<CompanyEmployeeRange, CompanyFacetOption[]>
+  >;
+  categoriesByRegionAndEmployeeRangeAndExecutive: Partial<
+    Record<
+      CompanyRegion,
+      Partial<Record<CompanyEmployeeRange, CompanyFacetOption[]>>
+    >
+  >;
+  categoriesByExecutiveRoleContext: Record<string, CompanyFacetOption[]>;
 };
 
 export type CompanySearchResult = {

@@ -3,7 +3,9 @@ import { ArrowDownAZ, ArrowUpAZ } from "lucide-react";
 
 import { createCompanySearchHref } from "../lib/search-params";
 import type { CompanyListItem, CompanySearchFilters, CompanySort } from "../types";
+import { getCompanyHref as getSeoCompanyHref } from "../lib/urls";
 import { CategoryBadge } from "./category-badge";
+import { ExecutiveBadges } from "./executive-badge";
 
 export type CompanyTableProps = {
   companies: CompanyListItem[];
@@ -105,7 +107,7 @@ function SortableHeader({
 export function CompanyTable({
   companies,
   filters,
-  getCompanyHref = (company) => `/companies/${company.id}`,
+  getCompanyHref = (company) => getSeoCompanyHref(company),
 }: CompanyTableProps) {
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -148,12 +150,15 @@ export function CompanyTable({
                   className="align-top transition hover:bg-primary/5"
                 >
                   <td className="px-4 py-4">
-                    <Link
-                      href={href}
-                      className="font-semibold text-slate-950 transition hover:text-primary"
-                    >
-                      {company.name || "-"}
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={href}
+                        className="font-semibold text-slate-950 transition hover:text-primary"
+                      >
+                        {company.name || "-"}
+                      </Link>
+                      <ExecutiveBadges executive={company.executive} />
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 font-medium text-slate-800">
                     {company.representative || "-"}

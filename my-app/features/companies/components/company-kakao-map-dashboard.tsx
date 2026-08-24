@@ -36,6 +36,7 @@ import {
 } from "react";
 
 import { formatNumber } from "@/lib/format";
+import { getCompanyHref } from "../lib/urls";
 import type { CompanyMapPoint, CompanyMapStats } from "../types";
 
 type CompanyKakaoMapDashboardProps = {
@@ -1122,7 +1123,7 @@ export function CompanyKakaoMapDashboard({
                   </div>
                 </dl>
                 <Link
-                  href={`/companies/${activeCompany.id}`}
+                  href={getCompanyHref(activeCompany)}
                   className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   상세 보기
@@ -1186,7 +1187,7 @@ export function CompanyKakaoMapDashboard({
                         {activeCompany.name || "기업명 미등록"}
                       </span>
                       <Link
-                        href={`/companies/${activeCompany.id}`}
+                        href={getCompanyHref(activeCompany)}
                         className="shrink-0 rounded border border-slate-300 px-2 py-0.5 text-[11px] font-semibold text-slate-700"
                       >
                         상세

@@ -9,6 +9,11 @@ import {
   COMPANY_REGIONS,
   INDUSTRY_CHAMBER_CATEGORY_MAP,
 } from "../data/categories";
+import {
+  COMPANY_EXECUTIVE_ROLES,
+  getCompanyExecutiveRoles,
+} from "../data/executive-roles";
+import type { CompanyExecutiveRole } from "../data/executive-roles";
 import { companies as localCompanies } from "../data/companies";
 import type {
   Company,
@@ -20,6 +25,8 @@ import type {
   CompanySearchFilters,
   CompanySearchResult,
 } from "../types";
+import { getCompanyIdFromSlug, getCompanySlug } from "./urls";
+import { getCategoryFacetContextKey } from "./facet-keys";
 
 type CompanyRow = {
   id: number;
@@ -31,6 +38,7 @@ type CompanyRow = {
   standard_industry: string | null;
   company_name: string | null;
   ceo_name: string | null;
+  executive: string | null;
   address: string | null;
   phone: string | null;
   email: string | null;
@@ -57,10 +65,12 @@ type CompanyFacetRow = Pick<
   | "location"
   | "address"
   | "employee_count"
+  | "executive"
 >;
 
 type CompanyDirectoryMetadata = {
   facets: CompanyFacets;
+  rows: CompanyFacetRow[];
 };
 
 const COMPANY_CACHE_REVALIDATE_SECONDS = 300;
@@ -77,6 +87,7 @@ const COMPANY_SELECT_COLUMNS = [
   "standard_industry",
   "company_name",
   "ceo_name",
+  "executive",
   "address",
   "phone",
   "email",
@@ -101,6 +112,7 @@ const COMPANY_FACET_SELECT_COLUMNS = [
   "location",
   "address",
   "employee_count",
+  "executive",
 ].join(",");
 const industryChamberCategoryEntries = Object.entries(
   INDUSTRY_CHAMBER_CATEGORY_MAP,
@@ -112,6 +124,21 @@ const localCompanyIndexById = new Map(
 );
 const employeeRangeMap = new Map(
   COMPANY_EMPLOYEE_RANGES.map((range) => [range.value, range]),
+);
+const executivePriority = new Map<CompanyExecutiveRole, number>([
+  ["회장", 0],
+  ["명예회장", 1],
+  ["부회장", 2],
+  ["감사", 3],
+  ["상임의원", 4],
+  ["경제자문", 5],
+  ["의원", 6],
+  ["특별의원", 7],
+]);
+const executiveRoleCombinations: CompanyExecutiveRole[][] = Array.from(
+  { length: 2 ** COMPANY_EXECUTIVE_ROLES.length - 1 },
+  (_, mask) =>
+    COMPANY_EXECUTIVE_ROLES.filter((_, index) => mask & (1 << index)),
 );
 
 let directoryMetadataCache: {
@@ -139,6 +166,8 @@ type ChainedQuery<T> = {
   gte: (column: string, value: number) => T;
   lte: (column: string, value: number) => T;
   ilike: (column: string, pattern: string) => T;
+  neq: (column: string, value: string) => T;
+  not: (column: string, operator: string, value: string) => T;
   or: (filters: string) => T;
   order: (
     column: string,
@@ -255,6 +284,10 @@ function normalizeRegion(location: string | null, address: string | null) {
   }
 
   return location?.trim() ?? "";
+}
+
+function hasExecutiveValue(value: string | null | undefined) {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function compactIndustryName(value: string) {
@@ -433,6 +466,7 @@ function mapCompany(row: CompanyRow): Company {
     id: String(row.id),
     name: row.company_name ?? "",
     representative: row.ceo_name ?? "",
+    executive: row.executive?.trim() ?? "",
     region,
     district: "",
     industry,
@@ -459,6 +493,41 @@ function getLocalCompanyIndex(company: Company) {
   return localCompanyIndexById.get(company.id) ?? Number.MAX_SAFE_INTEGER;
 }
 
+function getExecutivePriority(value?: string | null) {
+  const priorities = getCompanyExecutiveRoles(value)
+    .map((role) => executivePriority.get(role as CompanyExecutiveRole))
+    .filter((priority): priority is number => priority !== undefined);
+
+  return priorities.length > 0 ? Math.min(...priorities) : Number.MAX_SAFE_INTEGER;
+}
+
+function sortCompaniesByDefault(
+  companies: Company[],
+  filters: CompanySearchFilters,
+) {
+  return companies
+    .map((company, index) => ({ company, index }))
+    .toSorted((left, right) => {
+      const priorityDifference =
+        getExecutivePriority(left.company.executive) -
+        getExecutivePriority(right.company.executive);
+
+      if (priorityDifference !== 0) {
+        return priorityDifference;
+      }
+
+      if (filters.q) {
+        return (
+          left.company.name.localeCompare(right.company.name, "ko-KR") ||
+          left.index - right.index
+        );
+      }
+
+      return left.index - right.index;
+    })
+    .map(({ company }) => company);
+}
+
 function getPrimaryLocalCategory(company: Company) {
   const primaryCategory = company.categories[0];
 
@@ -480,6 +549,7 @@ function createLocalFacetRows(): CompanyFacetRow[] {
     location: [company.region, company.district].filter(Boolean).join(" "),
     address: company.address,
     employee_count: company.employees,
+    executive: company.executive ?? null,
   }));
 }
 
@@ -487,6 +557,7 @@ function createLocalSearchText(company: Company) {
   return [
     company.name,
     company.representative,
+    company.executive,
     company.region,
     company.district,
     company.industry,
@@ -544,6 +615,19 @@ function filterLocalCompanies(filters: CompanySearchFilters) {
       return false;
     }
 
+    if (filters.executiveOnly && !hasExecutiveValue(company.executive)) {
+      return false;
+    }
+
+    if (
+      filters.executiveRoles.length > 0 &&
+      !filters.executiveRoles.some((role) =>
+        getCompanyExecutiveRoles(company.executive).includes(role),
+      )
+    ) {
+      return false;
+    }
+
     if (!matchesLocalCategoryFilter(company, filters.categories)) {
       return false;
     }
@@ -566,6 +650,24 @@ function filterLocalCompanies(filters: CompanySearchFilters) {
 }
 
 function compareLocalCompanies(a: Company, b: Company, filters: CompanySearchFilters) {
+  if (filters.sort === "relevance") {
+    const priorityDifference =
+      getExecutivePriority(a.executive) - getExecutivePriority(b.executive);
+
+    if (priorityDifference !== 0) {
+      return priorityDifference;
+    }
+
+    if (filters.q) {
+      return (
+        a.name.localeCompare(b.name, "ko-KR") ||
+        getLocalCompanyIndex(a) - getLocalCompanyIndex(b)
+      );
+    }
+
+    return getLocalCompanyIndex(a) - getLocalCompanyIndex(b);
+  }
+
   switch (filters.sort) {
     case "name-asc":
       return (
@@ -588,13 +690,6 @@ function compareLocalCompanies(a: Company, b: Company, filters: CompanySearchFil
         getLocalCompanyIndex(a) - getLocalCompanyIndex(b)
       );
     default:
-      if (filters.q) {
-        return (
-          a.name.localeCompare(b.name, "ko-KR") ||
-          getLocalCompanyIndex(a) - getLocalCompanyIndex(b)
-        );
-      }
-
       return getLocalCompanyIndex(a) - getLocalCompanyIndex(b);
   }
 }
@@ -700,6 +795,17 @@ function applySearchFilters<T extends ChainedQuery<T>>(
 ): T {
   if (filters.region) {
     query = query.eq("region", filters.region);
+  }
+
+  if (filters.executiveOnly) {
+    query = query.not("executive", "is", "null").not("executive", "eq", "");
+  }
+
+  if (filters.executiveRoles.length > 0) {
+    const executiveValues = filters.executiveRoles.flatMap((role) =>
+      role === "회장" ? [role, "8대 회장"] : [role],
+    );
+    query = query.in("executive", executiveValues);
   }
 
   if (filters.categories.length > 0) {
@@ -871,6 +977,8 @@ function countCategories(
   rows: CompanyFacetRow[],
   targetRegion?: CompanyRegion,
   targetEmployeeRange: CompanyEmployeeRange | "" = "",
+  targetExecutiveRoles: CompanyExecutiveRole[] = [],
+  targetExecutiveOnly = false,
 ) {
   const categoryCounts = new Map<string, number>(
     COMPANY_CATEGORIES.map((category) => [category, 0]),
@@ -887,7 +995,22 @@ function countCategories(
       continue;
     }
 
-    const category = normalizeCategoriesFromSource(row)[0];
+    if (targetExecutiveOnly && !hasExecutiveValue(row.executive)) {
+      continue;
+    }
+
+    if (
+      targetExecutiveRoles.length > 0 &&
+      !targetExecutiveRoles.some((role) =>
+        getCompanyExecutiveRoles(row.executive).includes(role),
+      )
+    ) {
+      continue;
+    }
+
+    const category = normalizeCategoriesFromSource(row)[0] as
+      | CompanyCategory
+      | undefined;
 
     if (!category) {
       continue;
@@ -902,7 +1025,147 @@ function countCategories(
   }));
 }
 
-function createCompanyFacets(rows: CompanyFacetRow[]): CompanyFacets {
+function countExecutiveRoles(
+  rows: CompanyFacetRow[],
+  targetRegion?: CompanyRegion,
+  targetEmployeeRange: CompanyEmployeeRange | "" = "",
+  targetCategories: CompanyCategory[] = [],
+) {
+  const roleCounts = new Map<CompanyExecutiveRole, number>(
+    COMPANY_EXECUTIVE_ROLES.map((role) => [role, 0]),
+  );
+
+  for (const row of rows) {
+    if (targetRegion && normalizeRegionValue(row) !== targetRegion) {
+      continue;
+    }
+
+    if (!matchesEmployeeCountByRange(row.employee_count, targetEmployeeRange)) {
+      continue;
+    }
+
+    const category = normalizeCategoriesFromSource(row)[0] as
+      | CompanyCategory
+      | undefined;
+
+    if (targetCategories.length > 0) {
+      if (!category || !targetCategories.includes(category)) {
+        continue;
+      }
+    }
+
+    for (const role of new Set(getCompanyExecutiveRoles(row.executive))) {
+      if (roleCounts.has(role as CompanyExecutiveRole)) {
+        roleCounts.set(
+          role as CompanyExecutiveRole,
+          (roleCounts.get(role as CompanyExecutiveRole) ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  return COMPANY_EXECUTIVE_ROLES.map((value) => ({
+    value,
+    count: roleCounts.get(value) ?? 0,
+  }));
+}
+
+function countExecutiveCompanies(
+  rows: CompanyFacetRow[],
+  targetRegion?: CompanyRegion,
+  targetEmployeeRange: CompanyEmployeeRange | "" = "",
+  targetCategories: CompanyCategory[] = [],
+) {
+  return rows.filter((row) => {
+    if (targetRegion && normalizeRegionValue(row) !== targetRegion) {
+      return false;
+    }
+
+    const category = normalizeCategoriesFromSource(row)[0] as
+      | CompanyCategory
+      | undefined;
+
+    return (
+      hasExecutiveValue(row.executive) &&
+      matchesEmployeeCountByRange(row.employee_count, targetEmployeeRange) &&
+      (targetCategories.length === 0 ||
+        (category !== undefined && targetCategories.includes(category)))
+    );
+  }).length;
+}
+
+function mergeFacetCounts(groups: CompanyFacetOption[][]) {
+  const counts = new Map<string, number>();
+
+  for (const group of groups) {
+    for (const facet of group) {
+      counts.set(facet.value, (counts.get(facet.value) ?? 0) + facet.count);
+    }
+  }
+
+  return [...counts.entries()].map(([value, count]) => ({ value, count }));
+}
+
+function getSelectedEmployeeRanges(
+  filters: CompanySearchFilters,
+): Array<CompanyEmployeeRange | ""> {
+  return filters.employeeRanges.length > 0 ? filters.employeeRanges : [""];
+}
+
+function countCategoriesForFilters(
+  rows: CompanyFacetRow[],
+  filters: CompanySearchFilters,
+) {
+  return mergeFacetCounts(
+    getSelectedEmployeeRanges(filters).map((employeeRange) =>
+      countCategories(
+        rows,
+        filters.region || undefined,
+        employeeRange,
+        filters.executiveRoles,
+        filters.executiveOnly,
+      ),
+    ),
+  );
+}
+
+function countExecutiveRolesForFilters(
+  rows: CompanyFacetRow[],
+  filters: CompanySearchFilters,
+) {
+  return mergeFacetCounts(
+    getSelectedEmployeeRanges(filters).map((employeeRange) =>
+      countExecutiveRoles(
+        rows,
+        filters.region || undefined,
+        employeeRange,
+        filters.categories,
+      ),
+    ),
+  );
+}
+
+function countExecutiveCompaniesForFilters(
+  rows: CompanyFacetRow[],
+  filters: CompanySearchFilters,
+) {
+  return getSelectedEmployeeRanges(filters).reduce(
+    (count, employeeRange) =>
+      count +
+      countExecutiveCompanies(
+        rows,
+        filters.region || undefined,
+        employeeRange,
+        filters.categories,
+      ),
+    0,
+  );
+}
+
+function createCompanyFacets(
+  rows: CompanyFacetRow[],
+  filters?: CompanySearchFilters,
+): CompanyFacets {
   const normalizedRegions = rows
     .map((row) => normalizeRegionValue(row))
     .filter(Boolean);
@@ -931,6 +1194,111 @@ function createCompanyFacets(rows: CompanyFacetRow[]): CompanyFacets {
       Partial<Record<CompanyEmployeeRange, CompanyFacetOption[]>>
     >
   >;
+  const categoriesByExecutive = countCategories(rows, undefined, "", [], true);
+  const categoriesByRegionAndExecutive = Object.fromEntries(
+    COMPANY_REGIONS.map((region) => [
+      region,
+      countCategories(rows, region, "", [], true),
+    ]),
+  ) as Partial<Record<CompanyRegion, CompanyFacetOption[]>>;
+  const categoriesByEmployeeRangeAndExecutive = Object.fromEntries(
+    COMPANY_EMPLOYEE_RANGES.map((range) => [
+      range.value,
+      countCategories(rows, undefined, range.value, [], true),
+    ]),
+  ) as Partial<Record<CompanyEmployeeRange, CompanyFacetOption[]>>;
+  const categoriesByRegionAndEmployeeRangeAndExecutive = Object.fromEntries(
+    COMPANY_REGIONS.map((region) => [
+      region,
+      Object.fromEntries(
+        COMPANY_EMPLOYEE_RANGES.map((range) => [
+          range.value,
+          countCategories(rows, region, range.value, [], true),
+        ]),
+      ),
+    ]),
+  ) as Partial<
+    Record<
+      CompanyRegion,
+      Partial<Record<CompanyEmployeeRange, CompanyFacetOption[]>>
+    >
+  >;
+  const categoriesByExecutiveRoleContext: Record<
+    string,
+    CompanyFacetOption[]
+  > = {};
+
+  for (const region of ["", ...COMPANY_REGIONS] as Array<CompanyRegion | "">) {
+    for (const employeeRange of [
+      "",
+      ...COMPANY_EMPLOYEE_RANGES.map((range) => range.value),
+    ] as Array<CompanyEmployeeRange | "">) {
+      for (const roles of executiveRoleCombinations) {
+        categoriesByExecutiveRoleContext[
+          getCategoryFacetContextKey(region, employeeRange, roles)
+        ] = countCategories(
+          rows,
+          region || undefined,
+          employeeRange,
+          roles,
+          true,
+        );
+      }
+    }
+  }
+  const executiveRolesByRegion = Object.fromEntries(
+    COMPANY_REGIONS.map((region) => [
+      region,
+      countExecutiveRoles(rows, region),
+    ]),
+  ) as Partial<Record<CompanyRegion, CompanyFacetOption[]>>;
+  const executiveRolesByEmployeeRange = Object.fromEntries(
+    COMPANY_EMPLOYEE_RANGES.map((range) => [
+      range.value,
+      countExecutiveRoles(rows, undefined, range.value),
+    ]),
+  ) as Partial<Record<CompanyEmployeeRange, CompanyFacetOption[]>>;
+  const executiveRolesByRegionAndEmployeeRange = Object.fromEntries(
+    COMPANY_REGIONS.map((region) => [
+      region,
+      Object.fromEntries(
+        COMPANY_EMPLOYEE_RANGES.map((range) => [
+          range.value,
+          countExecutiveRoles(rows, region, range.value),
+        ]),
+      ),
+    ]),
+  ) as Partial<
+    Record<
+      CompanyRegion,
+      Partial<Record<CompanyEmployeeRange, CompanyFacetOption[]>>
+    >
+  >;
+  const executiveCountByRegion = Object.fromEntries(
+    COMPANY_REGIONS.map((region) => [
+      region,
+      countExecutiveCompanies(rows, region),
+    ]),
+  ) as Partial<Record<CompanyRegion, number>>;
+  const executiveCountByEmployeeRange = Object.fromEntries(
+    COMPANY_EMPLOYEE_RANGES.map((range) => [
+      range.value,
+      countExecutiveCompanies(rows, undefined, range.value),
+    ]),
+  ) as Partial<Record<CompanyEmployeeRange, number>>;
+  const executiveCountByRegionAndEmployeeRange = Object.fromEntries(
+    COMPANY_REGIONS.map((region) => [
+      region,
+      Object.fromEntries(
+        COMPANY_EMPLOYEE_RANGES.map((range) => [
+          range.value,
+          countExecutiveCompanies(rows, region, range.value),
+        ]),
+      ),
+    ]),
+  ) as Partial<
+    Record<CompanyRegion, Partial<Record<CompanyEmployeeRange, number>>>
+  >;
   const industries = countBy(
     rows
       .map((row) => {
@@ -944,14 +1312,43 @@ function createCompanyFacets(rows: CompanyFacetRow[]): CompanyFacets {
       })
       .filter(Boolean),
   );
+  const executiveRoles = countExecutiveRoles(rows);
+  const categories = countCategories(rows);
+  const filteredCategoryCounts = filters
+    ? countCategoriesForFilters(rows, filters)
+    : categories;
+  const filteredExecutiveRoleCounts = filters
+    ? countExecutiveRolesForFilters(rows, filters)
+    : executiveRoles;
 
   return {
     regions: countByOptions(COMPANY_REGIONS, normalizedRegions),
+    executiveCount: rows.reduce(
+      (count, row) => count + (hasExecutiveValue(row.executive) ? 1 : 0),
+      0,
+    ),
+    executiveCountByRegion,
+    executiveCountByEmployeeRange,
+    executiveCountByRegionAndEmployeeRange,
+    executiveRoles,
+    executiveRolesByRegion,
+    executiveRolesByEmployeeRange,
+    executiveRolesByRegionAndEmployeeRange,
+    filteredCategoryCounts,
+    filteredExecutiveRoleCounts,
+    filteredExecutiveCount: filters
+      ? countExecutiveCompaniesForFilters(rows, filters)
+      : rows.filter((row) => hasExecutiveValue(row.executive)).length,
     industries,
     categories: countCategories(rows),
     categoriesByRegion,
     categoriesByEmployeeRange,
     categoriesByRegionAndEmployeeRange,
+    categoriesByExecutive,
+    categoriesByRegionAndExecutive,
+    categoriesByEmployeeRangeAndExecutive,
+    categoriesByRegionAndEmployeeRangeAndExecutive,
+    categoriesByExecutiveRoleContext,
   };
 }
 
@@ -963,6 +1360,7 @@ async function loadCompanyDirectoryMetadata() {
 
     return {
       facets: createCompanyFacets(rows),
+      rows,
     };
   } catch (error) {
     if (!isUnavailableDataSourceError(error)) {
@@ -973,6 +1371,7 @@ async function loadCompanyDirectoryMetadata() {
 
     return {
       facets: createCompanyFacets(createLocalFacetRows()),
+      rows: createLocalFacetRows(),
     };
   }
 }
@@ -1043,6 +1442,10 @@ async function createCompanySearchResult(
   filters: CompanySearchFilters,
 ): Promise<CompanySearchResult> {
   try {
+    if (filters.sort === "relevance") {
+      return await createDefaultCompanySearchResult(filters);
+    }
+
     const firstPage = await fetchSearchPage(
       filters,
       filters.page,
@@ -1087,6 +1490,43 @@ async function createCompanySearchResult(
   }
 }
 
+async function createDefaultCompanySearchResult(
+  filters: CompanySearchFilters,
+): Promise<CompanySearchResult> {
+  const firstPage = await fetchSearchPage(
+    filters,
+    1,
+    SUPABASE_BATCH_SIZE,
+    true,
+  );
+  const total = firstPage.total ?? firstPage.rows.length;
+  const pages = Math.max(1, Math.ceil(total / SUPABASE_BATCH_SIZE));
+  const items = [...firstPage.rows];
+
+  for (let currentPage = 2; currentPage <= pages; currentPage += 1) {
+    const page = await fetchSearchPage(
+      filters,
+      currentPage,
+      SUPABASE_BATCH_SIZE,
+      false,
+    );
+    items.push(...page.rows);
+  }
+
+  const sortedItems = sortCompaniesByDefault(items, filters);
+  const totalPages = Math.max(1, Math.ceil(total / filters.pageSize));
+  const page = Math.min(filters.page, totalPages);
+  const start = (page - 1) * filters.pageSize;
+
+  return {
+    items: sortedItems.slice(start, start + filters.pageSize),
+    total,
+    page,
+    pageSize: filters.pageSize,
+    totalPages,
+  };
+}
+
 export const searchCompanies = cache(
   async (filters: CompanySearchFilters): Promise<CompanySearchResult> => {
     return createCompanySearchResult(filters);
@@ -1099,7 +1539,7 @@ export const getCompanyPageData = cache(
     const result = await createCompanySearchResult(filters);
 
     return {
-      facets: metadata.facets,
+      facets: createCompanyFacets(metadata.rows, filters),
       result,
     };
   },
@@ -1128,7 +1568,9 @@ export const getCompaniesForExport = cache(
         items.push(...page.rows);
       }
 
-      return items;
+      return filters.sort === "relevance"
+        ? sortCompaniesByDefault(items, filters)
+        : items;
     } catch (error) {
       if (!isUnavailableDataSourceError(error)) {
         throw error;
@@ -1145,23 +1587,28 @@ export const getCompaniesForExport = cache(
 
 export const getCompaniesForMap = cache(async () => getAllCompaniesForMap());
 
-export const getCompanyById = cache(async (id: string) => {
-  const localCompany = localCompanies.find((company) => company.id === id) ?? null;
-  const numericId = Number(id);
+export const getCompanyBySlug = cache(async (slug: string) => {
+  const decodedSlug = decodeURIComponent(slug);
+  const localCompany =
+    localCompanies.find(
+      (company) =>
+        company.id === decodedSlug || getCompanySlug(company) === decodedSlug,
+    ) ?? null;
+  const numericId = getCompanyIdFromSlug(decodedSlug);
 
-  if (!Number.isFinite(numericId)) {
+  if (!numericId) {
     return localCompany;
   }
 
   const { data, error } = await supabase
     .from("companies")
     .select(COMPANY_SELECT_COLUMNS)
-    .eq("id", numericId)
+    .eq("id", Number(numericId))
     .maybeSingle();
 
   if (error) {
     if (isSupabaseUnavailableError(error)) {
-      logLocalFallback(error, `company detail (${id})`);
+      logLocalFallback(error, `company detail (${decodedSlug})`);
       return localCompany;
     }
 
@@ -1174,6 +1621,10 @@ export const getCompanyById = cache(async (id: string) => {
 
   return mapCompany(data as unknown as CompanyRow);
 });
+
+export const getCompanyById = cache(async (id: string) =>
+  getCompanyBySlug(id),
+);
 
 export const getCompanyFacets = cache(async (): Promise<CompanyFacets> => {
   return (await getCompanyDirectoryMetadata()).facets;

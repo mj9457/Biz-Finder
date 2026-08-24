@@ -2,6 +2,7 @@
 
 import {
   BriefcaseBusiness,
+  BadgeCheck,
   ChevronDown,
   ChevronRight,
   Filter,
@@ -18,7 +19,12 @@ import {
   COMPANY_EMPLOYEE_RANGES,
   COMPANY_REGIONS,
 } from "../data/categories";
+import {
+  COMPANY_EXECUTIVE_ROLES,
+  type CompanyExecutiveRole,
+} from "../data/executive-roles";
 import { getSelectedCategoryFilterClassName } from "../lib/category-style";
+import { getCategoryFacetContextKey } from "../lib/facet-keys";
 import { createCompanySearchHref } from "../lib/search-params";
 import type {
   CompanyCategory,
@@ -76,6 +82,10 @@ function mergeCategoryFacetCounts(groups: CompanyFacetOption[][]) {
   return [...counts.entries()].map(([value, count]) => ({ value, count }));
 }
 
+function haveSameFilterValues<T>(left: T[], right: T[]) {
+  return left.length === right.length && left.every((value) => right.includes(value));
+}
+
 export function CompanyFilterSidebar({
   facets,
   filters,
@@ -87,9 +97,16 @@ export function CompanyFilterSidebar({
 }: CompanyFilterSidebarProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [isExecutiveFilterOpen, setIsExecutiveFilterOpen] = useState(true);
   const [isIndustryFilterOpen, setIsIndustryFilterOpen] = useState(true);
   const [isEmployeeFilterOpen, setIsEmployeeFilterOpen] = useState(true);
   const [selectedRegion, setSelectedRegion] = useState(filters.region);
+  const [selectedExecutiveOnly, setSelectedExecutiveOnly] = useState(
+    filters.executiveOnly,
+  );
+  const [selectedExecutiveRoles, setSelectedExecutiveRoles] = useState<
+    CompanyExecutiveRole[]
+  >(() => [...filters.executiveRoles]);
   const [selectedCategories, setSelectedCategories] = useState<
     CompanyCategory[]
   >(() => sortCategories(filters.categories));
@@ -114,11 +131,16 @@ export function CompanyFilterSidebar({
     () => new Set(selectedCategories),
     [selectedCategories],
   );
+  const selectedExecutiveRoleSet = useMemo(
+    () => new Set(selectedExecutiveRoles),
+    [selectedExecutiveRoles],
+  );
   const selectedEmployeeRangeLabel =
     selectedEmployeeRanges.length === 0
       ? "전체"
       : `${selectedEmployeeRanges.length}개 선택`;
   const fieldsId = `${idPrefix}-fields`;
+  const executiveOptionsId = `${idPrefix}-executive-options`;
   const industryOptionsId = `${idPrefix}-industry-options`;
   const employeeOptionsId = `${idPrefix}-employee-options`;
   const normalizedFilterCategories = useMemo(
@@ -142,38 +164,202 @@ export function CompanyFilterSidebar({
     );
   const hasDraftChanges =
     selectedRegion !== filters.region ||
+    selectedExecutiveOnly !== filters.executiveOnly ||
+    selectedExecutiveRoles.length !== filters.executiveRoles.length ||
+    selectedExecutiveRoles.some(
+      (role, index) => role !== filters.executiveRoles[index],
+    ) ||
     hasEmployeeRangeDraftChanges ||
     hasCategoryDraftChanges;
 
   const categoryCounts = useMemo(() => {
+    const isDraftContextSynced =
+      selectedRegion === filters.region &&
+      selectedExecutiveOnly === filters.executiveOnly &&
+      haveSameFilterValues(selectedEmployeeRanges, filters.employeeRanges) &&
+      haveSameFilterValues(selectedExecutiveRoles, filters.executiveRoles);
+
+    if (isDraftContextSynced) {
+      return new Map(
+        facets.filteredCategoryCounts.map((facet) => [facet.value, facet.count]),
+      );
+    }
+
+    const executiveFilterSelected =
+      selectedExecutiveOnly || selectedExecutiveRoles.length > 0;
+    const roleKey = getCategoryFacetContextKey(
+      selectedRegion,
+      "",
+      selectedExecutiveRoles,
+    );
+    const getRoleCategoryCounts = (employeeRange: CompanyEmployeeRange | "") =>
+      facets.categoriesByExecutiveRoleContext[
+        getCategoryFacetContextKey(
+          selectedRegion,
+          employeeRange,
+          selectedExecutiveRoles,
+        )
+      ] ?? [];
+    const hasExactRoleCounts =
+      selectedExecutiveRoles.length > 0 &&
+      (facets.categoriesByExecutiveRoleContext[roleKey] !== undefined);
     const categoryFacets = selectedRegion
       ? selectedEmployeeRanges.length > 0
         ? mergeCategoryFacetCounts(
             selectedEmployeeRanges.map(
               (employeeRange) =>
-                facets.categoriesByRegionAndEmployeeRange[selectedRegion]?.[
-                  employeeRange
-                ] ?? [],
+                (hasExactRoleCounts
+                  ? getRoleCategoryCounts(employeeRange)
+                  : executiveFilterSelected
+                  ? facets.categoriesByRegionAndEmployeeRangeAndExecutive[
+                      selectedRegion
+                    ]?.[employeeRange]
+                  : facets.categoriesByRegionAndEmployeeRange[selectedRegion]?.[
+                      employeeRange
+                    ]) ?? [],
             ),
           )
-        : (facets.categoriesByRegion[selectedRegion] ?? [])
+        : hasExactRoleCounts
+          ? getRoleCategoryCounts("")
+          : executiveFilterSelected
+          ? (facets.categoriesByRegionAndExecutive[selectedRegion] ?? [])
+          : (facets.categoriesByRegion[selectedRegion] ?? [])
       : selectedEmployeeRanges.length > 0
         ? mergeCategoryFacetCounts(
             selectedEmployeeRanges.map(
               (employeeRange) =>
-                facets.categoriesByEmployeeRange[employeeRange] ?? [],
+                (hasExactRoleCounts
+                  ? getRoleCategoryCounts(employeeRange)
+                  : executiveFilterSelected
+                  ? facets.categoriesByEmployeeRangeAndExecutive[employeeRange]
+                  : facets.categoriesByEmployeeRange[employeeRange]) ?? [],
             ),
           )
-        : facets.categories;
+        : hasExactRoleCounts
+          ? getRoleCategoryCounts("")
+          : executiveFilterSelected
+          ? facets.categoriesByExecutive
+          : facets.categories;
 
     return new Map(categoryFacets.map((facet) => [facet.value, facet.count]));
   }, [
     facets.categories,
+    facets.categoriesByExecutive,
     facets.categoriesByEmployeeRange,
+    facets.categoriesByEmployeeRangeAndExecutive,
     facets.categoriesByRegion,
+    facets.categoriesByRegionAndExecutive,
     facets.categoriesByRegionAndEmployeeRange,
+    facets.categoriesByRegionAndEmployeeRangeAndExecutive,
+    facets.categoriesByExecutiveRoleContext,
+    facets.filteredCategoryCounts,
+    filters.employeeRanges,
+    filters.executiveOnly,
+    filters.executiveRoles,
     selectedEmployeeRanges,
+    selectedExecutiveRoles,
+    selectedExecutiveOnly,
     selectedRegion,
+    filters.region,
+  ]);
+  const executiveRoleCounts = useMemo(() => {
+    const isDraftContextSynced =
+      selectedRegion === filters.region &&
+      selectedExecutiveOnly === filters.executiveOnly &&
+      haveSameFilterValues(selectedEmployeeRanges, filters.employeeRanges) &&
+      haveSameFilterValues(selectedCategories, filters.categories);
+
+    if (isDraftContextSynced) {
+      return new Map(
+        facets.filteredExecutiveRoleCounts.map((facet) => [
+          facet.value,
+          facet.count,
+        ]),
+      );
+    }
+
+    const roleFacets = selectedRegion
+      ? selectedEmployeeRanges.length > 0
+        ? mergeCategoryFacetCounts(
+            selectedEmployeeRanges.map(
+              (employeeRange) =>
+                facets.executiveRolesByRegionAndEmployeeRange[selectedRegion]?.[
+                  employeeRange
+                ] ?? [],
+            ),
+          )
+        : (facets.executiveRolesByRegion[selectedRegion] ?? [])
+      : selectedEmployeeRanges.length > 0
+        ? mergeCategoryFacetCounts(
+            selectedEmployeeRanges.map(
+              (employeeRange) =>
+                facets.executiveRolesByEmployeeRange[employeeRange] ?? [],
+            ),
+          )
+        : facets.executiveRoles;
+
+    return new Map(roleFacets.map((facet) => [facet.value, facet.count]));
+  }, [
+    facets.executiveRoles,
+    facets.executiveRolesByEmployeeRange,
+    facets.executiveRolesByRegion,
+    facets.executiveRolesByRegionAndEmployeeRange,
+    facets.filteredExecutiveRoleCounts,
+    filters.categories,
+    filters.employeeRanges,
+    filters.executiveOnly,
+    selectedEmployeeRanges,
+    selectedCategories,
+    selectedExecutiveOnly,
+    selectedRegion,
+    filters.region,
+  ]);
+  const executiveCount = useMemo(() => {
+    const isDraftContextSynced =
+      selectedRegion === filters.region &&
+      haveSameFilterValues(selectedEmployeeRanges, filters.employeeRanges) &&
+      haveSameFilterValues(selectedCategories, filters.categories);
+
+    if (isDraftContextSynced) {
+      return facets.filteredExecutiveCount;
+    }
+
+    if (selectedRegion) {
+      if (selectedEmployeeRanges.length > 0) {
+        return selectedEmployeeRanges.reduce(
+          (count, employeeRange) =>
+            count +
+            (facets.executiveCountByRegionAndEmployeeRange[selectedRegion]?.[
+              employeeRange
+            ] ?? 0),
+          0,
+        );
+      }
+
+      return facets.executiveCountByRegion[selectedRegion] ?? 0;
+    }
+
+    if (selectedEmployeeRanges.length > 0) {
+      return selectedEmployeeRanges.reduce(
+        (count, employeeRange) =>
+          count + (facets.executiveCountByEmployeeRange[employeeRange] ?? 0),
+        0,
+      );
+    }
+
+    return facets.executiveCount;
+  }, [
+    facets.executiveCount,
+    facets.executiveCountByEmployeeRange,
+    facets.executiveCountByRegion,
+    facets.executiveCountByRegionAndEmployeeRange,
+    facets.filteredExecutiveCount,
+    filters.categories,
+    filters.employeeRanges,
+    selectedEmployeeRanges,
+    selectedCategories,
+    selectedRegion,
+    filters.region,
   ]);
 
   function updateRegion(nextRegion: CompanyRegion | "") {
@@ -212,8 +398,18 @@ export function CompanyFilterSidebar({
     setSelectedEmployeeRanges([]);
   }
 
+  function toggleExecutiveRole(role: CompanyExecutiveRole) {
+    setSelectedExecutiveRoles((current) =>
+      current.includes(role)
+        ? current.filter((value) => value !== role)
+        : [...current, role],
+    );
+  }
+
   function resetDraftFilters() {
     setSelectedRegion("");
+    setSelectedExecutiveOnly(false);
+    setSelectedExecutiveRoles([]);
     setSelectedCategories([]);
     setSelectedEmployeeRanges([]);
   }
@@ -225,6 +421,9 @@ export function CompanyFilterSidebar({
 
     const href = createCompanySearchHref(filters, {
       region: selectedRegion,
+      executiveOnly:
+        selectedExecutiveOnly || selectedExecutiveRoles.length > 0,
+      executiveRoles: selectedExecutiveRoles,
       categories: selectedCategories,
       employeeRanges: selectedEmployeeRanges,
       page: 1,
@@ -304,6 +503,27 @@ export function CompanyFilterSidebar({
           isCollapsed ? "lg:hidden" : "",
         ].join(" ")}
       >
+        <div className="sticky top-0 z-20 -mx-4 -mt-4 grid gap-2 border-b border-slate-200 bg-white px-4 py-3 sm:-mx-5 sm:-mt-5 sm:px-5 lg:-mx-6 lg:-mt-6 lg:px-6">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={resetDraftFilters}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <RotateCcw className="size-4" aria-hidden="true" />
+              <span>필터 초기화</span>
+            </button>
+            <button
+              type="button"
+              onClick={applyDraftFilters}
+              disabled={!hasDraftChanges || isPending}
+              className="inline-flex h-10 items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isPending ? "적용 중..." : "확인"}
+            </button>
+          </div>
+        </div>
+
         <div className="grid gap-2">
           <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
             <MapPin className="size-4 text-slate-500" aria-hidden="true" />
@@ -341,6 +561,106 @@ export function CompanyFilterSidebar({
         <div className="grid gap-2">
           <button
             type="button"
+            onClick={() => setIsExecutiveFilterOpen((current) => !current)}
+            aria-expanded={isExecutiveFilterOpen}
+            aria-controls={executiveOptionsId}
+            className="flex w-full items-center justify-between gap-3 rounded-md px-1 py-1 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+              <BadgeCheck className="size-4 text-slate-500" aria-hidden="true" />
+              <span>임·의원사</span>
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="text-xs text-slate-500">
+                {selectedExecutiveRoles.length === 0
+                  ? "전체"
+                  : `${selectedExecutiveRoles.length}개 선택`}
+              </span>
+              {isExecutiveFilterOpen ? (
+                <ChevronDown className="size-4 text-slate-600" aria-hidden="true" />
+              ) : (
+                <ChevronRight className="size-4 text-slate-600" aria-hidden="true" />
+              )}
+            </span>
+          </button>
+          <div
+            id={executiveOptionsId}
+            className={["grid gap-2", isExecutiveFilterOpen ? "" : "hidden"].join(" ")}
+          >
+          <button
+            type="button"
+            aria-pressed={
+              selectedExecutiveOnly && selectedExecutiveRoles.length === 0
+            }
+            onClick={() => {
+              setSelectedExecutiveOnly(true);
+              setSelectedExecutiveRoles([]);
+            }}
+            className={[
+              "flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm transition",
+              selectedExecutiveOnly && selectedExecutiveRoles.length === 0
+                ? "border-primary bg-primary text-white"
+                : "border-slate-300 bg-white text-slate-700 hover:border-primary hover:text-primary",
+            ].join(" ")}
+          >
+            <span className="min-w-0 truncate">전체</span>
+            <span className="flex items-center gap-2 text-xs">
+              <span
+                className={
+                  selectedExecutiveOnly && selectedExecutiveRoles.length === 0
+                    ? "text-white/80"
+                    : "text-slate-500"
+                }
+              >
+                {executiveCount}
+              </span>
+            </span>
+          </button>
+          <div className="grid grid-cols-2 gap-2">
+            {COMPANY_EXECUTIVE_ROLES.map((role) => {
+              const checked = selectedExecutiveRoleSet.has(role);
+              const count = executiveRoleCounts.get(role) ?? 0;
+
+              return (
+                <label
+                  key={role}
+                  className={[
+                    "flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm transition",
+                    checked
+                      ? "border-primary bg-primary text-white"
+                      : "border-slate-300 bg-white text-slate-700 hover:border-slate-400",
+                  ].join(" ")}
+                >
+                  <span className="min-w-0 truncate">{role}</span>
+                  <span className="flex items-center gap-2 text-xs">
+                    <span
+                      className={
+                        checked ? "text-white/80" : "text-slate-500"
+                      }
+                    >
+                      {count}
+                    </span>
+                    <input
+                      type="checkbox"
+                      value={role}
+                      checked={checked}
+                      onChange={() => {
+                        toggleExecutiveRole(role);
+                        setSelectedExecutiveOnly(true);
+                      }}
+                      className="size-4 accent-primary"
+                    />
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <button
+            type="button"
             onClick={() => setIsIndustryFilterOpen((current) => !current)}
             aria-expanded={isIndustryFilterOpen}
             aria-controls={industryOptionsId}
@@ -355,7 +675,9 @@ export function CompanyFilterSidebar({
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="text-xs text-slate-500">
-                {selectedCategories.length}개 선택
+                {selectedCategories.length === 0
+                  ? "전체"
+                  : `${selectedCategories.length}개 선택`}
               </span>
               {isIndustryFilterOpen ? (
                 <ChevronDown
@@ -498,24 +820,6 @@ export function CompanyFilterSidebar({
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={resetDraftFilters}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
-          >
-            <RotateCcw className="size-4" aria-hidden="true" />
-            <span>필터 초기화</span>
-          </button>
-          <button
-            type="button"
-            onClick={applyDraftFilters}
-            disabled={!hasDraftChanges || isPending}
-            className="inline-flex h-10 items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isPending ? "적용 중..." : "확인"}
-          </button>
-        </div>
       </div>
     </aside>
   );

@@ -5,7 +5,6 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { MapPin, Menu } from "lucide-react";
-import headerLogo from "@/public/logo-white-header.png";
 
 import type { CompanyFacets, CompanySearchFilters } from "../types";
 import { CompanyFilterSidebar } from "./company-filter-sidebar";
@@ -26,6 +25,8 @@ export function CompanyPageShell({
   const sidebarKey = [
     "filter",
     filters.region,
+    filters.executiveOnly ? "executive" : "all-companies",
+    filters.executiveRoles.join("|"),
     filters.categories.join("|"),
     filters.employeeRanges.join("|"),
   ].join("-");
@@ -72,9 +73,9 @@ export function CompanyPageShell({
       </div>
 
       <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-1">
-        <header className="border-b border-primary/30 bg-white">
-          <div className="flex w-full flex-col gap-4 px-5 py-4 sm:px-8 md:flex-row md:items-center md:justify-between">
-            <div className="flex min-w-0 items-center gap-3">
+        <header className="min-h-[88px] border-b border-slate-200 bg-white">
+          <div className="mx-auto flex min-h-[88px] w-full max-w-[1472px] flex-wrap items-center justify-between gap-3 px-4 py-4 sm:flex-nowrap sm:px-8 sm:py-0">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-4 sm:gap-8">
               <button
                 type="button"
                 onClick={() => setIsMobileSidebarOpen(true)}
@@ -82,39 +83,37 @@ export function CompanyPageShell({
                 aria-expanded={isMobileSidebarOpen}
                 aria-label="필터 열기"
                 title="필터 열기"
-                className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-white/30 bg-white text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-white/40 lg:hidden"
+                className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 lg:hidden"
               >
                 <Menu className="size-5" aria-hidden="true" />
               </button>
               <Link
                 href="/companies"
-                aria-label="경기동부상공회의소 회원사 검색서비스 홈"
-                className="flex min-w-0 flex-col"
+                aria-label="회원사 검색으로 이동"
               >
                 <Image
-                  src={headerLogo}
+                  src="/logo.png"
                   alt="경기동부상공회의소"
                   width={480}
                   height={66}
-                  sizes="(min-width: 640px) 240px, 192px"
-                  decoding="sync"
-                  className="h-auto w-48 sm:w-60"
-                  loading="lazy"
+                  priority
+                  className="h-auto w-40 sm:w-60"
                 />
-                <span className="mt-2 text-sm font-medium leading-none text-gray-500 sm:text-sm">
-                  회원사 검색서비스
-                </span>
               </Link>
-            </div>
-            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
               <Link
-                href="/companies/kakaomap"
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                href="/companies"
+                className="text-sm font-semibold text-slate-700 transition hover:text-primary sm:text-base"
               >
-                <MapPin className="size-4" aria-hidden="true" />
-                지도 대시보드
+                회원사 검색
               </Link>
             </div>
+            <Link
+              href="/companies/kakaomap"
+              className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 shadow-[0_2px_6px_rgb(15_23_42_/_0.06)] transition hover:border-primary hover:text-primary hover:shadow-sm"
+            >
+              <MapPin className="size-4" aria-hidden="true" />
+              지도 대시보드
+            </Link>
           </div>
         </header>
         <main className="min-w-0 flex-1">{children}</main>

@@ -54,6 +54,24 @@ export function ActiveFilterChips({ filters }: ActiveFilterChipsProps) {
     });
   }
 
+  if (filters.executiveOnly && filters.executiveRoles.length === 0) {
+    chips.push({
+      label: "임·의원사",
+      href: createCompanySearchHref(filters, { executiveOnly: false }),
+    });
+  }
+
+  for (const executiveRole of filters.executiveRoles) {
+    chips.push({
+      label: `임·의원: ${executiveRole}`,
+      href: createCompanySearchHref(filters, {
+        executiveRoles: filters.executiveRoles.filter(
+          (role) => role !== executiveRole,
+        ),
+      }),
+    });
+  }
+
   for (const category of filters.categories) {
     chips.push({
       label: `업종: ${category}`,

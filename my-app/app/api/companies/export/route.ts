@@ -47,6 +47,7 @@ function companyToCsvRow(company: Company) {
   return [
     company.name,
     company.representative,
+    company.executive ?? "",
     [company.region, company.district].filter(Boolean).join(" "),
     company.mainProduct,
     company.categories.join(", "),
@@ -65,6 +66,7 @@ function createCompaniesCsv(companies: Company[]) {
   const headers = [
     "기업명",
     "대표자명",
+    "임·의원 직책",
     "지역",
     "주요품목",
     "업종",
