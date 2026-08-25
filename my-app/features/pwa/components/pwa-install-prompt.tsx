@@ -16,7 +16,10 @@ function isIosDevice() {
     return false;
   }
 
-  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
 }
 
 function isMobileDevice() {
@@ -24,7 +27,7 @@ function isMobileDevice() {
     return false;
   }
 
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  return isIosDevice() || /Android|Mobile/i.test(navigator.userAgent);
 }
 
 function isStandaloneMode() {
@@ -46,34 +49,25 @@ export function PwaInstallPrompt() {
   const [isStandalone, setIsStandalone] = useState(true);
   const [isIos, setIsIos] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
 
   useEffect(() => {
-    const syncPromptState = () => {
+    const frameId = window.requestAnimationFrame(() => {
       setIsIos(isIosDevice());
       setIsMobile(isMobileDevice());
       setIsStandalone(isStandaloneMode());
-    };
-
-    const frameId = window.requestAnimationFrame(syncPromptState);
-
-    if (!("serviceWorker" in navigator)) {
-      return () => {
-        window.cancelAnimationFrame(frameId);
-      };
-    }
-
-    navigator.serviceWorker
-      .register("/sw.js", {
-        scope: "/",
-        updateViaCache: "none",
-      })
-      .catch((error) => {
-        console.error("Failed to register service worker", error);
-      });
+    });
 
     const handleBeforeInstallPrompt = (event: Event) => {
+      // Keep the native desktop flow intact. On mobile, defer the prompt to
+      // the explicit install button so prompt() runs from a user gesture.
+      if (!isMobileDevice()) {
+        return;
+      }
+
       event.preventDefault();
       setInstallEvent(event as BeforeInstallPromptEvent);
+      setIsMobile(true);
     };
 
     const handleAppInstalled = () => {
@@ -84,6 +78,17 @@ export function PwaInstallPrompt() {
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     window.addEventListener("appinstalled", handleAppInstalled);
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw.js", {
+          scope: "/",
+          updateViaCache: "none",
+        })
+        .catch((error) => {
+          console.error("Failed to register service worker", error);
+        });
+    }
 
     return () => {
       window.cancelAnimationFrame(frameId);
@@ -108,13 +113,23 @@ export function PwaInstallPrompt() {
   }, [dismissed, installEvent, isIos, isMobile, isStandalone]);
 
   async function handleInstall() {
-    if (!installEvent) {
+    const deferredPrompt = installEvent;
+
+    if (!deferredPrompt || isInstalling) {
       return;
     }
 
-    await installEvent.prompt();
-    await installEvent.userChoice.catch(() => null);
-    setInstallEvent(null);
+    setIsInstalling(true);
+
+    try {
+      await deferredPrompt.prompt();
+      await deferredPrompt.userChoice.catch(() => null);
+      setInstallEvent(null);
+    } catch (error) {
+      console.error("Failed to show the PWA install prompt", error);
+    } finally {
+      setIsInstalling(false);
+    }
   }
 
   if (!shouldShow) {
@@ -163,6 +178,7 @@ export function PwaInstallPrompt() {
               onClick={() => {
                 void handleInstall();
               }}
+              disabled={isInstalling}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
               <Download className="size-4" aria-hidden="true" />

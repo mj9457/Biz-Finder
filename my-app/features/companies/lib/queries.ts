@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 
 import { supabase } from "@/lib/supabase";
 import {
@@ -135,12 +136,6 @@ const executivePriority = new Map<CompanyExecutiveRole, number>([
   ["의원", 6],
   ["특별의원", 7],
 ]);
-const executiveRoleCombinations: CompanyExecutiveRole[][] = Array.from(
-  { length: 2 ** COMPANY_EXECUTIVE_ROLES.length - 1 },
-  (_, mask) =>
-    COMPANY_EXECUTIVE_ROLES.filter((_, index) => mask & (1 << index)),
-);
-
 let directoryMetadataCache: {
   data: CompanyDirectoryMetadata;
   expiresAt: number;
@@ -886,38 +881,74 @@ async function fetchSearchPage(
   };
 }
 
-async function fetchAllRowsWithColumns<T extends object>(columns: string) {
-  let from = 0;
-  const rows: T[] = [];
-
-  while (true) {
-    const to = from + SUPABASE_BATCH_SIZE - 1;
-    const { data, error } = await supabase
-      .from("companies")
-      .select(columns)
-      .order("id", { ascending: true })
-      .range(from, to);
-
-    if (error) {
-      throw createDataSourceError("Failed to load companies", error);
-    }
-
-    const chunk = (data ?? []) as unknown as T[];
-
-    if (chunk.length === 0) {
-      break;
-    }
-
-    rows.push(...chunk);
-
-    if (chunk.length < SUPABASE_BATCH_SIZE) {
-      break;
-    }
-
-    from += SUPABASE_BATCH_SIZE;
+function getCachedSearchPage(
+  filters: CompanySearchFilters,
+  page: number,
+  pageSize: number,
+  includeCount: boolean,
+) {
+  // A 500-row relevance batch can exceed Next's 2 MB data-cache limit.
+  // Keep large batches request-local while caching normal paginated results.
+  if (pageSize > 100) {
+    return fetchSearchPage(filters, page, pageSize, includeCount);
   }
 
-  return rows;
+  return unstable_cache(
+    () => fetchSearchPage(filters, page, pageSize, includeCount),
+    [
+      "company-search-page",
+      JSON.stringify(filters),
+      String(page),
+      String(pageSize),
+      includeCount ? "with-count" : "without-count",
+    ],
+    {
+      revalidate: COMPANY_CACHE_REVALIDATE_SECONDS,
+      tags: ["companies"],
+    },
+  )();
+}
+
+async function fetchAllRowsWithColumns<T extends object>(columns: string) {
+  const { data, error, count } = await supabase
+    .from("companies")
+    .select(columns, { count: "exact" })
+    .order("id", { ascending: true })
+    .range(0, SUPABASE_BATCH_SIZE - 1);
+
+  if (error) {
+    throw createDataSourceError("Failed to load companies", error);
+  }
+
+  const firstPage = (data ?? []) as unknown as T[];
+  const total = count ?? firstPage.length;
+  const pages = Math.max(1, Math.ceil(total / SUPABASE_BATCH_SIZE));
+
+  if (pages === 1) {
+    return firstPage;
+  }
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: pages - 1 }, (_, index) => {
+      const from = (index + 1) * SUPABASE_BATCH_SIZE;
+      const to = from + SUPABASE_BATCH_SIZE - 1;
+
+      return supabase
+        .from("companies")
+        .select(columns)
+        .order("id", { ascending: true })
+        .range(from, to)
+        .then(({ data: pageData, error: pageError }) => {
+          if (pageError) {
+            throw createDataSourceError("Failed to load companies", pageError);
+          }
+
+          return (pageData ?? []) as unknown as T[];
+        });
+    }),
+  );
+
+  return [firstPage, ...remainingPages].flat();
 }
 
 function countBy(values: string[]) {
@@ -1228,19 +1259,24 @@ function createCompanyFacets(
     CompanyFacetOption[]
   > = {};
 
-  for (const region of ["", ...COMPANY_REGIONS] as Array<CompanyRegion | "">) {
-    for (const employeeRange of [
-      "",
-      ...COMPANY_EMPLOYEE_RANGES.map((range) => range.value),
-    ] as Array<CompanyEmployeeRange | "">) {
-      for (const roles of executiveRoleCombinations) {
+  // Only serialize the role combination currently shown in the URL. Sending
+  // every possible subset of eight roles made the client facet payload several
+  // megabytes larger without changing the actual filter behavior.
+  const selectedRoles = filters?.executiveRoles ?? [];
+
+  if (selectedRoles.length > 0) {
+    for (const region of ["", ...COMPANY_REGIONS] as Array<CompanyRegion | "">) {
+      for (const employeeRange of [
+        "",
+        ...COMPANY_EMPLOYEE_RANGES.map((range) => range.value),
+      ] as Array<CompanyEmployeeRange | "">) {
         categoriesByExecutiveRoleContext[
-          getCategoryFacetContextKey(region, employeeRange, roles)
+          getCategoryFacetContextKey(region, employeeRange, selectedRoles)
         ] = countCategories(
           rows,
           region || undefined,
           employeeRange,
-          roles,
+          selectedRoles,
           true,
         );
       }
@@ -1446,7 +1482,7 @@ async function createCompanySearchResult(
       return await createDefaultCompanySearchResult(filters);
     }
 
-    const firstPage = await fetchSearchPage(
+    const firstPage = await getCachedSearchPage(
       filters,
       filters.page,
       filters.pageSize,
@@ -1466,7 +1502,7 @@ async function createCompanySearchResult(
       };
     }
 
-    const correctedPage = await fetchSearchPage(
+    const correctedPage = await getCachedSearchPage(
       filters,
       page,
       filters.pageSize,
@@ -1493,7 +1529,7 @@ async function createCompanySearchResult(
 async function createDefaultCompanySearchResult(
   filters: CompanySearchFilters,
 ): Promise<CompanySearchResult> {
-  const firstPage = await fetchSearchPage(
+  const firstPage = await getCachedSearchPage(
     filters,
     1,
     SUPABASE_BATCH_SIZE,
@@ -1501,17 +1537,17 @@ async function createDefaultCompanySearchResult(
   );
   const total = firstPage.total ?? firstPage.rows.length;
   const pages = Math.max(1, Math.ceil(total / SUPABASE_BATCH_SIZE));
-  const items = [...firstPage.rows];
-
-  for (let currentPage = 2; currentPage <= pages; currentPage += 1) {
-    const page = await fetchSearchPage(
-      filters,
-      currentPage,
-      SUPABASE_BATCH_SIZE,
-      false,
-    );
-    items.push(...page.rows);
-  }
+  const remainingPages = await Promise.all(
+    Array.from({ length: Math.max(0, pages - 1) }, (_, index) =>
+      getCachedSearchPage(
+        filters,
+        index + 2,
+        SUPABASE_BATCH_SIZE,
+        false,
+      ),
+    ),
+  );
+  const items = [firstPage, ...remainingPages].flatMap((page) => page.rows);
 
   const sortedItems = sortCompaniesByDefault(items, filters);
   const totalPages = Math.max(1, Math.ceil(total / filters.pageSize));
@@ -1535,8 +1571,10 @@ export const searchCompanies = cache(
 
 export const getCompanyPageData = cache(
   async (filters: CompanySearchFilters) => {
-    const metadata = await getCompanyDirectoryMetadata();
-    const result = await createCompanySearchResult(filters);
+    const [metadata, result] = await Promise.all([
+      getCompanyDirectoryMetadata(),
+      createCompanySearchResult(filters),
+    ]);
 
     return {
       facets: createCompanyFacets(metadata.rows, filters),
@@ -1548,7 +1586,7 @@ export const getCompanyPageData = cache(
 export const getCompaniesForExport = cache(
   async (filters: CompanySearchFilters) => {
     try {
-      const firstPage = await fetchSearchPage(
+      const firstPage = await getCachedSearchPage(
         filters,
         1,
         SUPABASE_BATCH_SIZE,
@@ -1556,17 +1594,19 @@ export const getCompaniesForExport = cache(
       );
       const total = firstPage.total ?? firstPage.rows.length;
       const pages = Math.max(1, Math.ceil(total / SUPABASE_BATCH_SIZE));
-      const items = [...firstPage.rows];
-
-      for (let currentPage = 2; currentPage <= pages; currentPage += 1) {
-        const page = await fetchSearchPage(
-          filters,
-          currentPage,
-          SUPABASE_BATCH_SIZE,
-          false,
-        );
-        items.push(...page.rows);
-      }
+      const remainingPages = await Promise.all(
+        Array.from({ length: Math.max(0, pages - 1) }, (_, index) =>
+          getCachedSearchPage(
+            filters,
+            index + 2,
+            SUPABASE_BATCH_SIZE,
+            false,
+          ),
+        ),
+      );
+      const items = [firstPage, ...remainingPages].flatMap(
+        (page) => page.rows,
+      );
 
       return filters.sort === "relevance"
         ? sortCompaniesByDefault(items, filters)
@@ -1629,3 +1669,10 @@ export const getCompanyById = cache(async (id: string) =>
 export const getCompanyFacets = cache(async (): Promise<CompanyFacets> => {
   return (await getCompanyDirectoryMetadata()).facets;
 });
+
+export const getCompanyFacetsForFilters = cache(
+  async (filters: CompanySearchFilters): Promise<CompanyFacets> => {
+    const metadata = await getCompanyDirectoryMetadata();
+    return createCompanyFacets(metadata.rows, filters);
+  },
+);

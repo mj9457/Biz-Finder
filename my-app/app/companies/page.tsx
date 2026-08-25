@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
-import { CompanyList } from "@/features/companies/components/company-list";
+import { Suspense } from "react";
+import { CompanyListSkeleton } from "@/features/companies/components/company-list-skeleton";
 import { CompanyPageShell } from "@/features/companies/components/company-page-shell";
-import { getCompanyPageData } from "@/features/companies/lib/queries";
+import { CompanyResults } from "@/features/companies/components/company-results";
+import { getCompanyFacetsForFilters } from "@/features/companies/lib/queries";
 import {
   parseCompanySearchParams,
   hasActiveCompanyFilters,
@@ -43,13 +45,15 @@ export default async function CompaniesPage({
   searchParams,
 }: CompaniesPageProps) {
   const filters = parseCompanySearchParams(await searchParams);
-  const { facets, result } = await getCompanyPageData(filters);
+  const facets = await getCompanyFacetsForFilters(filters);
 
   return (
     <CompanyPageShell filters={filters} facets={facets}>
       <div className="min-w-0 px-5 py-6 sm:px-8">
         <div className="mx-auto w-full">
-          <CompanyList result={result} filters={filters} />
+          <Suspense fallback={<CompanyListSkeleton />}>
+            <CompanyResults filters={filters} />
+          </Suspense>
         </div>
       </div>
     </CompanyPageShell>

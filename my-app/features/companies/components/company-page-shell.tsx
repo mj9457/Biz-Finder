@@ -96,7 +96,7 @@ export function CompanyPageShell({
                   alt="경기동부상공회의소"
                   width={480}
                   height={66}
-                  priority
+                  preload
                   className="h-auto w-40 sm:w-60"
                 />
               </Link>
