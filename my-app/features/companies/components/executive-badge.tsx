@@ -1,14 +1,4 @@
 import {
-  Award,
-  BriefcaseBusiness,
-  ClipboardCheck,
-  Crown,
-  Lightbulb,
-  Star,
-  UserRound,
-  UsersRound,
-} from "lucide-react";
-import {
   COMPANY_EXECUTIVE_ROLES,
   getCompanyExecutiveRoles,
 } from "../data/executive-roles";
@@ -17,17 +7,6 @@ import type { CompanyExecutiveRole } from "../data/executive-roles";
 const EXECUTIVE_ROLE_ORDER = COMPANY_EXECUTIVE_ROLES;
 
 type ExecutiveRole = CompanyExecutiveRole;
-
-const ROLE_ICONS: Record<ExecutiveRole, typeof Crown> = {
-  회장: Crown,
-  명예회장: Award,
-  부회장: UsersRound,
-  상임의원: BriefcaseBusiness,
-  특별의원: Star,
-  의원: UserRound,
-  감사: ClipboardCheck,
-  경제자문: Lightbulb,
-};
 
 const ROLE_CLASS_NAMES: Record<ExecutiveRole, string> = {
   회장: "bg-amber-50 text-amber-800 ring-amber-200",
@@ -68,13 +47,11 @@ export function ExecutiveBadges({ executive }: { executive?: string }) {
     >
       {roles.map((role) => {
         const className = ROLE_CLASS_NAMES[role as ExecutiveRole];
-        const RoleIcon = ROLE_ICONS[role as ExecutiveRole] ?? Award;
         return (
           <span
             key={role}
-            className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ring-1 ${className ?? "bg-slate-50 text-slate-700 ring-slate-300"}`}
+            className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium ring-1 ${className ?? "bg-slate-50 text-slate-700 ring-slate-300"}`}
           >
-            <RoleIcon className="size-3.5" aria-hidden="true" />
             {role}
           </span>
         );

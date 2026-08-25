@@ -39,10 +39,8 @@ type CompanyFilterSidebarProps = {
   facets: CompanyFacets;
   filters: CompanySearchFilters;
   idPrefix?: string;
-  isCollapsed?: boolean;
   isMobileDrawer?: boolean;
   onClose?: () => void;
-  onToggleCollapsed?: () => void;
 };
 
 const CATEGORY_ORDER_INDEX = new Map(
@@ -90,10 +88,8 @@ export function CompanyFilterSidebar({
   facets,
   filters,
   idPrefix = "company-filter",
-  isCollapsed = false,
   isMobileDrawer = false,
   onClose,
-  onToggleCollapsed,
 }: CompanyFilterSidebarProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -143,35 +139,6 @@ export function CompanyFilterSidebar({
   const executiveOptionsId = `${idPrefix}-executive-options`;
   const industryOptionsId = `${idPrefix}-industry-options`;
   const employeeOptionsId = `${idPrefix}-employee-options`;
-  const normalizedFilterCategories = useMemo(
-    () => sortCategories(filters.categories),
-    [filters.categories],
-  );
-  const hasCategoryDraftChanges =
-    selectedCategories.length !== normalizedFilterCategories.length ||
-    selectedCategories.some(
-      (category, index) => category !== normalizedFilterCategories[index],
-    );
-  const normalizedFilterEmployeeRanges = useMemo(
-    () => sortEmployeeRanges(filters.employeeRanges),
-    [filters.employeeRanges],
-  );
-  const hasEmployeeRangeDraftChanges =
-    selectedEmployeeRanges.length !== normalizedFilterEmployeeRanges.length ||
-    selectedEmployeeRanges.some(
-      (employeeRange, index) =>
-        employeeRange !== normalizedFilterEmployeeRanges[index],
-    );
-  const hasDraftChanges =
-    selectedRegion !== filters.region ||
-    selectedExecutiveOnly !== filters.executiveOnly ||
-    selectedExecutiveRoles.length !== filters.executiveRoles.length ||
-    selectedExecutiveRoles.some(
-      (role, index) => role !== filters.executiveRoles[index],
-    ) ||
-    hasEmployeeRangeDraftChanges ||
-    hasCategoryDraftChanges;
-
   const categoryCounts = useMemo(() => {
     const isDraftContextSynced =
       selectedRegion === filters.region &&
@@ -362,12 +329,34 @@ export function CompanyFilterSidebar({
     filters.region,
   ]);
 
+  type CompanyFilterPatch = Parameters<typeof createCompanySearchHref>[1];
+
+  function navigateWithFilters(patch: CompanyFilterPatch) {
+    const nextPatch: CompanyFilterPatch = {
+      region: patch.region ?? selectedRegion,
+      executiveOnly: patch.executiveOnly ?? selectedExecutiveOnly,
+      executiveRoles: patch.executiveRoles ?? selectedExecutiveRoles,
+      categories: patch.categories ?? selectedCategories,
+      employeeRanges: patch.employeeRanges ?? selectedEmployeeRanges,
+      ...patch,
+      page: 1,
+    };
+    const href = createCompanySearchHref(filters, {
+      ...nextPatch,
+    });
+
+    startTransition(() => {
+      router.replace(href, { scroll: false });
+    });
+  }
+
   function updateRegion(nextRegion: CompanyRegion | "") {
     if (nextRegion === selectedRegion) {
       return;
     }
 
     setSelectedRegion(nextRegion);
+    navigateWithFilters({ region: nextRegion });
   }
 
   function toggleCategory(category: CompanyCategory) {
@@ -378,10 +367,12 @@ export function CompanyFilterSidebar({
     );
 
     setSelectedCategories(nextCategories);
+    navigateWithFilters({ categories: nextCategories });
   }
 
   function resetCategories() {
     setSelectedCategories([]);
+    navigateWithFilters({ categories: [] });
   }
 
   function toggleEmployeeRange(employeeRange: CompanyEmployeeRange) {
@@ -392,46 +383,52 @@ export function CompanyFilterSidebar({
     );
 
     setSelectedEmployeeRanges(nextEmployeeRanges);
+    navigateWithFilters({ employeeRanges: nextEmployeeRanges });
   }
 
   function resetEmployeeRanges() {
     setSelectedEmployeeRanges([]);
+    navigateWithFilters({ employeeRanges: [] });
   }
 
   function toggleExecutiveRole(role: CompanyExecutiveRole) {
-    setSelectedExecutiveRoles((current) =>
-      current.includes(role)
-        ? current.filter((value) => value !== role)
-        : [...current, role],
-    );
+    const nextRoles = selectedExecutiveRoles.includes(role)
+      ? selectedExecutiveRoles.filter((value) => value !== role)
+      : [...selectedExecutiveRoles, role];
+
+    setSelectedExecutiveRoles(nextRoles);
+    setSelectedExecutiveOnly(true);
+    navigateWithFilters({
+      executiveOnly: true,
+      executiveRoles: nextRoles,
+    });
   }
 
-  function resetDraftFilters() {
+  function selectAllExecutives() {
+    const shouldClearExecutiveFilter =
+      selectedExecutiveOnly && selectedExecutiveRoles.length === 0;
+    const nextExecutiveOnly = !shouldClearExecutiveFilter;
+
+    setSelectedExecutiveOnly(nextExecutiveOnly);
+    setSelectedExecutiveRoles([]);
+    navigateWithFilters({
+      executiveOnly: nextExecutiveOnly,
+      executiveRoles: [],
+    });
+  }
+
+  function resetFilters() {
     setSelectedRegion("");
     setSelectedExecutiveOnly(false);
     setSelectedExecutiveRoles([]);
     setSelectedCategories([]);
     setSelectedEmployeeRanges([]);
-  }
-
-  function applyDraftFilters() {
-    if (!hasDraftChanges) {
-      return;
-    }
-
-    const href = createCompanySearchHref(filters, {
-      region: selectedRegion,
-      executiveOnly:
-        selectedExecutiveOnly || selectedExecutiveRoles.length > 0,
-      executiveRoles: selectedExecutiveRoles,
-      categories: selectedCategories,
-      employeeRanges: selectedEmployeeRanges,
-      page: 1,
-    });
-
-    startTransition(() => {
-      router.replace(href, { scroll: false });
-      onClose?.();
+    navigateWithFilters({
+      region: "",
+      executiveOnly: false,
+      executiveRoles: [],
+      categories: [],
+      employeeRanges: [],
     });
   }
 
@@ -439,44 +436,28 @@ export function CompanyFilterSidebar({
     <aside
       aria-busy={isPending}
       className={[
-        "bg-white",
+        "scrollbar-hidden bg-white",
         isMobileDrawer
           ? "h-full overflow-y-auto border-r border-slate-200 shadow-xl"
-          : "rounded-lg border border-slate-200 shadow-sm lg:sticky lg:top-0 lg:min-h-screen lg:max-h-screen lg:overflow-y-auto lg:rounded-none lg:border-y-0 lg:border-l-0 lg:border-r lg:border-r-slate-200 lg:shadow-none",
+          : "rounded-xl border border-slate-200 shadow-[0_8px_24px_rgb(15_23_42_/_0.08)] lg:sticky lg:top-5 lg:min-h-[calc(100svh-128px)] lg:max-h-[calc(100svh-128px)] lg:overflow-y-auto",
       ].join(" ")}
     >
-      <div
-        className={[
-          "flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-4",
-          isCollapsed ? "lg:justify-center lg:px-2" : "",
-        ].join(" ")}
-      >
-        <h2
-          className={[
-            "inline-flex items-center gap-2 text-base font-semibold text-slate-950",
-            isCollapsed ? "lg:sr-only" : "",
-          ].join(" ")}
-        >
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-4">
+        <div className="contents">
+        <h2 className="inline-flex items-center gap-2 text-base font-semibold text-slate-950">
           <Filter className="size-5 text-primary" aria-hidden="true" />
           필터
         </h2>
-        {onToggleCollapsed ? (
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            aria-expanded={!isCollapsed}
-            aria-controls={fieldsId}
-            aria-label={isCollapsed ? "필터 열기" : "필터 접기"}
-            title={isCollapsed ? "필터 열기" : "필터 접기"}
-            className="hidden size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 lg:inline-flex"
-          >
-            {isCollapsed ? (
-              <ChevronRight className="size-4" aria-hidden="true" />
-            ) : (
-              <ChevronDown className="size-4 rotate-90" aria-hidden="true" />
-            )}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={resetFilters}
+          disabled={isPending}
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <RotateCcw className="size-3.5" aria-hidden="true" />
+          필터 초기화
+        </button>
+        </div>
         {onClose ? (
           <button
             type="button"
@@ -490,40 +471,7 @@ export function CompanyFilterSidebar({
         ) : null}
       </div>
 
-      {isCollapsed ? (
-        <div className="hidden py-4 lg:flex lg:flex-col lg:items-center">
-          <span className="text-xs font-semibold text-slate-500">필터</span>
-        </div>
-      ) : null}
-
-      <div
-        id={fieldsId}
-        className={[
-          "grid gap-5 p-4 sm:p-5 lg:p-6",
-          isCollapsed ? "lg:hidden" : "",
-        ].join(" ")}
-      >
-        <div className="sticky top-0 z-20 -mx-4 -mt-4 grid gap-2 border-b border-slate-200 bg-white px-4 py-3 sm:-mx-5 sm:-mt-5 sm:px-5 lg:-mx-6 lg:-mt-6 lg:px-6">
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={resetDraftFilters}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
-            >
-              <RotateCcw className="size-4" aria-hidden="true" />
-              <span>필터 초기화</span>
-            </button>
-            <button
-              type="button"
-              onClick={applyDraftFilters}
-              disabled={!hasDraftChanges || isPending}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isPending ? "적용 중..." : "확인"}
-            </button>
-          </div>
-        </div>
-
+      <div id={fieldsId} className="grid gap-5 p-4 sm:p-5 lg:p-6">
         <div className="grid gap-2">
           <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
             <MapPin className="size-4 text-slate-500" aria-hidden="true" />
@@ -592,10 +540,7 @@ export function CompanyFilterSidebar({
             aria-pressed={
               selectedExecutiveOnly && selectedExecutiveRoles.length === 0
             }
-            onClick={() => {
-              setSelectedExecutiveOnly(true);
-              setSelectedExecutiveRoles([]);
-            }}
+            onClick={selectAllExecutives}
             className={[
               "flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm transition",
               selectedExecutiveOnly && selectedExecutiveRoles.length === 0
@@ -644,10 +589,7 @@ export function CompanyFilterSidebar({
                       type="checkbox"
                       value={role}
                       checked={checked}
-                      onChange={() => {
-                        toggleExecutiveRole(role);
-                        setSelectedExecutiveOnly(true);
-                      }}
+                      onChange={() => toggleExecutiveRole(role)}
                       className="size-4 accent-primary"
                     />
                   </span>

@@ -64,6 +64,16 @@ function getKakaoMapUrl(company: Company) {
   return `https://map.kakao.com/link/search/${encodeURIComponent(company.address)}`;
 }
 
+function getWebsiteUrl(value?: string) {
+  const website = value?.trim();
+
+  if (!website) {
+    return undefined;
+  }
+
+  return /^https?:\/\//i.test(website) ? website : `https://${website}`;
+}
+
 function DetailRow({ label, value, icon: Icon, href, newTab }: DetailRowProps) {
   const text = (
     <span className="break-words font-semibold leading-6 text-slate-900">
@@ -149,6 +159,7 @@ export function CompanyDetail({ company }: CompanyDetailProps) {
   const categoryChips = company.categories.length > 0 ? company.categories : [];
   const productChips = company.products.length > 0 ? company.products : [];
   const tagChips = company.tags.length > 0 ? company.tags : [];
+  const websiteHref = getWebsiteUrl(company.website);
 
   return (
     <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1.38fr_0.62fr]">
@@ -243,7 +254,7 @@ export function CompanyDetail({ company }: CompanyDetailProps) {
               label="웹사이트"
               value={company.website || "등록된 웹사이트가 없습니다."}
               icon={Globe}
-              href={company.website}
+              href={websiteHref}
               newTab
             />
           </dl>

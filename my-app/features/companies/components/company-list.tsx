@@ -71,10 +71,7 @@ function getVisiblePages(
   const end = Math.min(totalPages, initialStart + pageWindowSize - 1);
   const start = Math.max(1, end - pageWindowSize + 1);
 
-  return Array.from(
-    { length: end - start + 1 },
-    (_, index) => start + index,
-  );
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
 }
 
 export function CompanyList({ result, filters }: CompanyListProps) {
@@ -103,9 +100,7 @@ export function CompanyList({ result, filters }: CompanyListProps) {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <p className="text-sm text-slate-700">
-          현재 필터 조건에 맞는 기업 수
-        </p>
+        <p className="text-sm text-slate-700">현재 필터 조건에 맞는 기업 수</p>
         <strong className="text-base font-semibold text-slate-950">
           총 {formatNumber(result.total)}개
         </strong>

@@ -20,7 +20,6 @@ export function CompanyPageShell({
   facets,
   filters,
 }: CompanyPageShellProps) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const sidebarKey = [
     "filter",
@@ -32,14 +31,7 @@ export function CompanyPageShell({
   ].join("-");
 
   return (
-    <div
-      className={[
-        "min-h-screen lg:grid lg:transition-[grid-template-columns] lg:duration-200",
-        isSidebarOpen
-          ? "lg:grid-cols-[380px_minmax(0,1fr)]"
-          : "lg:grid-cols-[64px_minmax(0,1fr)]",
-      ].join(" ")}
-    >
+    <div className="min-h-screen">
       {isMobileSidebarOpen ? (
         <div className="fixed inset-0 z-[2000] lg:hidden">
           <button
@@ -61,20 +53,8 @@ export function CompanyPageShell({
         </div>
       ) : null}
 
-      <div className="hidden px-5 py-6 sm:px-8 lg:col-start-1 lg:row-start-1 lg:block lg:px-0 lg:py-0">
-        <CompanyFilterSidebar
-          key={sidebarKey}
-          filters={filters}
-          facets={facets}
-          idPrefix="company-filter-desktop"
-          isCollapsed={!isSidebarOpen}
-          onToggleCollapsed={() => setIsSidebarOpen((current) => !current)}
-        />
-      </div>
-
-      <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-1">
-        <header className="min-h-[88px] border-b border-slate-200 bg-white">
-          <div className="mx-auto flex min-h-[88px] w-full max-w-[1472px] flex-wrap items-center justify-between gap-3 px-4 py-4 sm:flex-nowrap sm:px-8 sm:py-0">
+      <header className="min-h-[88px] border-b border-slate-200 bg-white">
+        <div className="mx-auto flex min-h-[88px] w-full max-w-[1472px] flex-wrap items-center justify-between gap-3 px-4 py-4 sm:flex-nowrap sm:px-8 sm:py-0">
             <div className="flex min-w-0 items-center gap-3 sm:gap-4 sm:gap-8">
               <button
                 type="button"
@@ -114,10 +94,22 @@ export function CompanyPageShell({
               <MapPin className="size-4" aria-hidden="true" />
               지도 대시보드
             </Link>
+        </div>
+      </header>
+
+      <main className="min-w-0 flex-1">
+        <div className="mx-auto flex min-h-[calc(100svh-88px)] w-full max-w-[1472px]">
+          <div className="hidden shrink-0 lg:block lg:w-[380px] lg:py-5 lg:pl-5">
+            <CompanyFilterSidebar
+              key={sidebarKey}
+              filters={filters}
+              facets={facets}
+              idPrefix="company-filter-desktop"
+            />
           </div>
-        </header>
-        <main className="min-w-0 flex-1">{children}</main>
-      </div>
+          <div className="min-w-0 flex-1">{children}</div>
+        </div>
+      </main>
     </div>
   );
 }
