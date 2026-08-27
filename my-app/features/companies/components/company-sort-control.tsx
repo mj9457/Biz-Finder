@@ -29,13 +29,13 @@ export function CompanySortControl({ filters }: CompanySortControlProps) {
 
   return (
     <div className="flex items-center gap-2 text-sm">
-      <label className="flex items-center gap-2">
-        <span className="font-medium text-slate-700">정렬</span>
+      <label>
         <select
+          aria-label="정렬 기준"
           value={filters.sort}
           disabled={isPending}
           onChange={(event) => updateSort(event.target.value as CompanySort)}
-          className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-slate-100"
+          className="h-10 min-w-36 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-slate-100"
         >
           <option value="relevance">기본 정렬</option>
           <option value="name-asc">기업명 오름차순</option>

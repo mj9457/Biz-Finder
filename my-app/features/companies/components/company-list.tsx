@@ -84,26 +84,26 @@ export function CompanyList({ result, filters }: CompanyListProps) {
 
   return (
     <section className="grid min-w-0 gap-4">
-      <div className="grid min-w-0 max-w-[calc(100vw-40px)] grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:max-w-none sm:grid-cols-2 xl:flex xl:items-center xl:justify-between">
-        <div className="min-w-0 sm:col-span-2 xl:col-span-1 xl:flex-1">
+      <div className="grid min-w-0 max-w-[calc(100vw-40px)] gap-4 sm:max-w-none xl:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <CompanyKeywordSearch key={`search-${filters.q}`} filters={filters} />
         </div>
-        <div className="sm:justify-self-start xl:shrink-0">
+        <div className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:justify-end">
           <CompanyCsvDownload filters={filters} />
-        </div>
-        <div className="sm:justify-self-end xl:shrink-0">
           <CompanyViewToggle filters={filters} />
-        </div>
-        <div className="sm:col-span-2 xl:col-span-1 xl:shrink-0">
-          <CompanySortControl filters={filters} />
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <p className="text-sm text-slate-700">현재 필터 조건에 맞는 기업 수</p>
-        <strong className="text-base font-semibold text-slate-950">
-          총 {formatNumber(result.total)}개
-        </strong>
+      <div className="flex flex-col gap-3 rounded-xl border border-sky-100 bg-sky-50/50 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <p className="flex items-baseline gap-3 text-sm font-medium text-slate-700">
+          필터에 맞는 기업 수
+          <strong className="text-xl font-bold text-primary sm:text-2xl">
+            {formatNumber(result.total)}개
+          </strong>
+        </p>
+        <div className="flex justify-end">
+          <CompanySortControl filters={filters} />
+        </div>
       </div>
 
       {result.total === 0 ? (

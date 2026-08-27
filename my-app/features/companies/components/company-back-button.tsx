@@ -36,7 +36,7 @@ export function CompanyBackButton() {
 
         router.push(COMPANY_LIST_PATH);
       }}
-      className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 shadow-[0_2px_6px_rgb(15_23_42_/_0.06)] transition hover:border-primary hover:text-primary hover:shadow-sm"
+      className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-[0_2px_6px_rgb(15_23_42_/_0.06)] transition hover:border-primary hover:text-primary hover:shadow-sm sm:h-11 sm:gap-2 sm:px-5 sm:text-sm"
     >
       <ChevronLeft className="size-4" aria-hidden="true" />
       목록으로
