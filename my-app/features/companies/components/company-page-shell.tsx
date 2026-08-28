@@ -68,7 +68,7 @@ export function CompanyPageShell({
         }
       />
       <main className="min-w-0 flex-1">
-        <div className="mx-auto flex min-h-[calc(100svh-112px)] w-full max-w-[1472px] lg:min-h-[calc(100svh-88px)]">
+        <div className="mx-auto flex min-h-[calc(100svh-112px)] w-full max-w-[1472px] lg:min-h-[calc(100svh-90px)]">
           <div className="hidden shrink-0 lg:block lg:w-[380px] lg:py-5 lg:pl-5">
             <CompanyFilterSidebar
               key={sidebarKey}

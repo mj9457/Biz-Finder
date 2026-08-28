@@ -74,6 +74,25 @@ type CompanyDirectoryMetadata = {
   rows: CompanyFacetRow[];
 };
 
+// Facets deliberately omit q, sort, page, pageSize, and view. Those values do
+// not affect the counts rendered in the filter sidebar, so including them would
+// only fragment the persistent cache.
+type CompanyFacetFilters = Pick<
+  CompanySearchFilters,
+  | "region"
+  | "executiveOnly"
+  | "executiveRoles"
+  | "categories"
+  | "employeeRanges"
+>;
+
+type CompanyFilteredFacetResult = Pick<
+  CompanyFacets,
+  | "filteredCategoryCounts"
+  | "filteredExecutiveRoleCounts"
+  | "filteredExecutiveCount"
+>;
+
 const COMPANY_CACHE_REVALIDATE_SECONDS = 300;
 const COMPANY_CACHE_REVALIDATE_MS = COMPANY_CACHE_REVALIDATE_SECONDS * 1000;
 // Keep pagination below the common Supabase max rows per request limit.
@@ -115,6 +134,22 @@ const COMPANY_FACET_SELECT_COLUMNS = [
   "employee_count",
   "executive",
 ].join(",");
+const COMPANY_MAP_SELECT_COLUMNS = [
+  "id",
+  "company_type",
+  "location",
+  "industry_chamber",
+  "industry_code",
+  "standard_industry",
+  "company_name",
+  "address",
+  "phone",
+  "main_products",
+  "region",
+  "primary_category",
+  "latitude",
+  "longitude",
+].join(",");
 const industryChamberCategoryEntries = Object.entries(
   INDUSTRY_CHAMBER_CATEGORY_MAP,
 ) as Array<[string, CompanyCategory]>;
@@ -146,6 +181,7 @@ let companiesForMapCache: {
   expiresAt: number;
 } | null = null;
 let companiesForMapPromise: Promise<Company[]> | null = null;
+let filteredFacetRpcUnavailableUntil = 0;
 let hasLoggedLocalFallback = false;
 
 type SupabaseErrorLike = {
@@ -841,16 +877,12 @@ function applySearchSort<T extends ChainedQuery<T>>(
     });
   }
 
-  // relevance는 keyword 기반 정렬 우선 적용이 필요하지만,
-  // Supabase REST 쿼리에서는 커스텀 ranking 식을 직접 order하기 어렵기 때문에
-  // 우선 기업명 기준 안정 정렬을 사용합니다.
-  if (filters.q) {
-    return query.order("company_name", { ascending: true }).order("id", {
-      ascending: true,
-    });
-  }
-
-  return query.order("id", { ascending: true });
+  // The priority is materialized in PostgreSQL (see the Supabase migration),
+  // allowing relevance pages to fetch only their visible rows.
+  return query
+    .order("executive_priority", { ascending: true, nullsFirst: false })
+    .order("company_name", { ascending: true, nullsFirst: false })
+    .order("id", { ascending: true });
 }
 
 async function fetchSearchPage(
@@ -862,7 +894,9 @@ async function fetchSearchPage(
   const start = (page - 1) * pageSize;
   const end = start + pageSize - 1;
   let query = supabase.from("companies").select(COMPANY_SELECT_COLUMNS, {
-    count: includeCount ? "exact" : undefined,
+    // Pagination needs a total, but an exact COUNT(*) can dominate the query
+    // time on every filter change. PostgreSQL's planned count avoids that scan.
+    count: includeCount ? "planned" : undefined,
   });
 
   query = applySearchFilters(query, filters);
@@ -1138,14 +1172,14 @@ function mergeFacetCounts(groups: CompanyFacetOption[][]) {
 }
 
 function getSelectedEmployeeRanges(
-  filters: CompanySearchFilters,
+  filters: CompanyFacetFilters,
 ): Array<CompanyEmployeeRange | ""> {
   return filters.employeeRanges.length > 0 ? filters.employeeRanges : [""];
 }
 
 function countCategoriesForFilters(
   rows: CompanyFacetRow[],
-  filters: CompanySearchFilters,
+  filters: CompanyFacetFilters,
 ) {
   return mergeFacetCounts(
     getSelectedEmployeeRanges(filters).map((employeeRange) =>
@@ -1162,7 +1196,7 @@ function countCategoriesForFilters(
 
 function countExecutiveRolesForFilters(
   rows: CompanyFacetRow[],
-  filters: CompanySearchFilters,
+  filters: CompanyFacetFilters,
 ) {
   return mergeFacetCounts(
     getSelectedEmployeeRanges(filters).map((employeeRange) =>
@@ -1178,7 +1212,7 @@ function countExecutiveRolesForFilters(
 
 function countExecutiveCompaniesForFilters(
   rows: CompanyFacetRow[],
-  filters: CompanySearchFilters,
+  filters: CompanyFacetFilters,
 ) {
   return getSelectedEmployeeRanges(filters).reduce(
     (count, employeeRange) =>
@@ -1195,7 +1229,7 @@ function countExecutiveCompaniesForFilters(
 
 function createCompanyFacets(
   rows: CompanyFacetRow[],
-  filters?: CompanySearchFilters,
+  filters?: CompanyFacetFilters,
 ): CompanyFacets {
   const normalizedRegions = rows
     .map((row) => normalizeRegionValue(row))
@@ -1435,10 +1469,120 @@ async function getCompanyDirectoryMetadata(): Promise<CompanyDirectoryMetadata> 
   return directoryMetadataPromise;
 }
 
+function getCompanyFacetFilters(
+  filters: CompanySearchFilters,
+): CompanyFacetFilters {
+  return {
+    region: filters.region,
+    executiveOnly: filters.executiveOnly,
+    executiveRoles: [...filters.executiveRoles].toSorted(),
+    categories: [...filters.categories].toSorted(),
+    employeeRanges: [...filters.employeeRanges].toSorted(),
+  };
+}
+
+function parseCompanyFacetOptions(value: unknown): CompanyFacetOption[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const options: CompanyFacetOption[] = [];
+
+  for (const option of value) {
+    if (!isObjectRecord(option)) {
+      return null;
+    }
+
+    const facetValue = option.value;
+    const facetCount = option.count;
+
+    if (
+      typeof facetValue !== "string" ||
+      typeof facetCount !== "number" ||
+      !Number.isFinite(facetCount)
+    ) {
+      return null;
+    }
+
+    options.push({ value: facetValue, count: facetCount });
+  }
+
+  return options;
+}
+
+async function getCompanyFilteredFacetsFromDatabase(
+  filters: CompanyFacetFilters,
+): Promise<CompanyFilteredFacetResult | null> {
+  if (filteredFacetRpcUnavailableUntil > Date.now()) {
+    return null;
+  }
+
+  const { data, error } = await supabase.rpc("get_company_filtered_facets", {
+    p_region: filters.region,
+    p_executive_only: filters.executiveOnly,
+    p_executive_roles: filters.executiveRoles,
+    p_categories: filters.categories,
+    p_employee_ranges: filters.employeeRanges,
+  });
+
+  // The migration can be deployed independently of the application. Retain
+  // the cached JavaScript calculation until the RPC is available everywhere.
+  if (error) {
+    // Avoid an extra failed RPC on every filter request while a rolling deploy
+    // has not yet applied the corresponding database migration.
+    filteredFacetRpcUnavailableUntil =
+      Date.now() + COMPANY_CACHE_REVALIDATE_MS;
+    return null;
+  }
+
+  if (!isObjectRecord(data)) {
+    return null;
+  }
+
+  const filteredCategoryCounts = parseCompanyFacetOptions(
+    data.filteredCategoryCounts,
+  );
+  const filteredExecutiveRoleCounts = parseCompanyFacetOptions(
+    data.filteredExecutiveRoleCounts,
+  );
+  const filteredExecutiveCount = data.filteredExecutiveCount;
+
+  if (
+    !filteredCategoryCounts ||
+    !filteredExecutiveRoleCounts ||
+    typeof filteredExecutiveCount !== "number" ||
+    !Number.isFinite(filteredExecutiveCount)
+  ) {
+    return null;
+  }
+
+  return {
+    filteredCategoryCounts,
+    filteredExecutiveRoleCounts,
+    filteredExecutiveCount,
+  };
+}
+
+const getPersistedCompanyFacets = unstable_cache(
+  async (filters: CompanyFacetFilters): Promise<CompanyFacets> => {
+    const metadata = await getCompanyDirectoryMetadata();
+    return createCompanyFacets(metadata.rows, filters);
+  },
+  ["company-facets-v1"],
+  {
+    revalidate: COMPANY_CACHE_REVALIDATE_SECONDS,
+    tags: ["companies", "company-facets"],
+  },
+);
+
+function getCachedCompanyFacets(filters: CompanySearchFilters) {
+  return getPersistedCompanyFacets(getCompanyFacetFilters(filters));
+}
+
 async function loadCompaniesForMap() {
   try {
     const rows = await fetchAllRowsWithColumns<CompanyRow>(
-      COMPANY_SELECT_COLUMNS,
+      COMPANY_MAP_SELECT_COLUMNS,
     );
     return rows.map(mapCompany);
   } catch (error) {
@@ -1478,10 +1622,6 @@ async function createCompanySearchResult(
   filters: CompanySearchFilters,
 ): Promise<CompanySearchResult> {
   try {
-    if (filters.sort === "relevance") {
-      return await createDefaultCompanySearchResult(filters);
-    }
-
     const firstPage = await getCachedSearchPage(
       filters,
       filters.page,
@@ -1526,43 +1666,6 @@ async function createCompanySearchResult(
   }
 }
 
-async function createDefaultCompanySearchResult(
-  filters: CompanySearchFilters,
-): Promise<CompanySearchResult> {
-  const firstPage = await getCachedSearchPage(
-    filters,
-    1,
-    SUPABASE_BATCH_SIZE,
-    true,
-  );
-  const total = firstPage.total ?? firstPage.rows.length;
-  const pages = Math.max(1, Math.ceil(total / SUPABASE_BATCH_SIZE));
-  const remainingPages = await Promise.all(
-    Array.from({ length: Math.max(0, pages - 1) }, (_, index) =>
-      getCachedSearchPage(
-        filters,
-        index + 2,
-        SUPABASE_BATCH_SIZE,
-        false,
-      ),
-    ),
-  );
-  const items = [firstPage, ...remainingPages].flatMap((page) => page.rows);
-
-  const sortedItems = sortCompaniesByDefault(items, filters);
-  const totalPages = Math.max(1, Math.ceil(total / filters.pageSize));
-  const page = Math.min(filters.page, totalPages);
-  const start = (page - 1) * filters.pageSize;
-
-  return {
-    items: sortedItems.slice(start, start + filters.pageSize),
-    total,
-    page,
-    pageSize: filters.pageSize,
-    totalPages,
-  };
-}
-
 export const searchCompanies = cache(
   async (filters: CompanySearchFilters): Promise<CompanySearchResult> => {
     return createCompanySearchResult(filters);
@@ -1571,15 +1674,12 @@ export const searchCompanies = cache(
 
 export const getCompanyPageData = cache(
   async (filters: CompanySearchFilters) => {
-    const [metadata, result] = await Promise.all([
-      getCompanyDirectoryMetadata(),
+    const [facets, result] = await Promise.all([
+      getCompanyFacetsForFilters(filters),
       createCompanySearchResult(filters),
     ]);
 
-    return {
-      facets: createCompanyFacets(metadata.rows, filters),
-      result,
-    };
+    return { facets, result };
   },
 );
 
@@ -1627,6 +1727,38 @@ export const getCompaniesForExport = cache(
 
 export const getCompaniesForMap = cache(async () => getAllCompaniesForMap());
 
+export const getCompanyStaticParams = cache(async (limit = 100) => {
+  try {
+    const { data, error } = await supabase
+      .from("companies")
+      .select("id,company_name")
+      .order("id", { ascending: true })
+      .range(0, Math.max(0, limit - 1));
+
+    if (error) {
+      throw createDataSourceError("Failed to load company static params", error);
+    }
+
+    return ((data ?? []) as Array<Pick<CompanyRow, "id" | "company_name">>).map(
+      (company) => ({
+        id: getCompanySlug({
+          id: String(company.id),
+          name: company.company_name ?? "",
+        }),
+      }),
+    );
+  } catch (error) {
+    if (!isUnavailableDataSourceError(error)) {
+      throw error;
+    }
+
+    logLocalFallback(error, "company static params");
+    return localCompanies.slice(0, limit).map((company) => ({
+      id: getCompanySlug(company),
+    }));
+  }
+});
+
 export const getCompanyBySlug = cache(async (slug: string) => {
   const decodedSlug = decodeURIComponent(slug);
   const localCompany =
@@ -1672,7 +1804,11 @@ export const getCompanyFacets = cache(async (): Promise<CompanyFacets> => {
 
 export const getCompanyFacetsForFilters = cache(
   async (filters: CompanySearchFilters): Promise<CompanyFacets> => {
-    const metadata = await getCompanyDirectoryMetadata();
-    return createCompanyFacets(metadata.rows, filters);
+    const [facets, filteredFacets] = await Promise.all([
+      getCachedCompanyFacets(filters),
+      getCompanyFilteredFacetsFromDatabase(getCompanyFacetFilters(filters)),
+    ]);
+
+    return filteredFacets ? { ...facets, ...filteredFacets } : facets;
   },
 );

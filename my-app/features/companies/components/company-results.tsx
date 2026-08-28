@@ -1,13 +1,14 @@
-import { searchCompanies } from "../lib/queries";
-import type { CompanySearchFilters } from "../types";
+import type { CompanySearchFilters, CompanySearchResult } from "../types";
 import { CompanyList } from "./company-list";
 
 type CompanyResultsProps = {
   filters: CompanySearchFilters;
+  result: Promise<CompanySearchResult>;
 };
 
-export async function CompanyResults({ filters }: CompanyResultsProps) {
-  const result = await searchCompanies(filters);
-
-  return <CompanyList result={result} filters={filters} />;
+export async function CompanyResults({
+  filters,
+  result,
+}: CompanyResultsProps) {
+  return <CompanyList result={await result} filters={filters} />;
 }

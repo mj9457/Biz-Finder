@@ -96,9 +96,14 @@ export function CompanyCsvDownload({ filters }: CompanyCsvDownloadProps) {
 
     try {
       const params = createCompanyExportSearchParams(filters);
-      params.set("code", trimmedCode);
-      const response = await fetch(`/api/companies/export?${params}`, {
+      const response = await fetch("/api/companies/export", {
+        method: "POST",
         cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: trimmedCode,
+          query: params.toString(),
+        }),
       });
 
       if (response.status === 401) {

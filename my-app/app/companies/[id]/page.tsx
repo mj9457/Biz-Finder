@@ -9,7 +9,10 @@ import {
   createBreadcrumbSchema,
   createCompanySchema,
 } from "@/features/companies/lib/seo";
-import { getCompanyBySlug, getCompaniesForMap } from "@/features/companies/lib/queries";
+import {
+  getCompanyBySlug,
+  getCompanyStaticParams,
+} from "@/features/companies/lib/queries";
 import { getCompanyHref, getCompanySlug } from "@/features/companies/lib/urls";
 
 type CompanyDetailPageProps = {
@@ -19,10 +22,13 @@ type CompanyDetailPageProps = {
 };
 
 export async function generateStaticParams() {
-  const companies = await getCompaniesForMap();
-
-  return companies.map((company) => ({ id: getCompanySlug(company) }));
+  return getCompanyStaticParams();
 }
+
+// Prerender a bounded set at build time; all other valid company pages are
+// generated on their first request and then revalidated hourly.
+export const revalidate = 3600;
+export const dynamicParams = true;
 
 export async function generateMetadata({
   params,
@@ -93,7 +99,7 @@ export default async function CompanyDetailPage({
       />
       <CompanyHeader rightAction={<CompanyBackButton />} />
 
-      <main className="mx-auto flex min-h-[calc(100svh-112px)] w-full max-w-[1472px] flex-col gap-4 px-4 py-4 sm:px-8 lg:h-[calc(100svh-88px)] lg:gap-5 lg:py-6">
+      <main className="mx-auto flex min-h-[calc(100svh-112px)] w-full max-w-[1472px] flex-col gap-4 px-4 py-4 sm:px-8 lg:h-[calc(100svh-90px)] lg:gap-5 lg:py-6">
         <div className="min-h-0 flex-1">
           <CompanyDetail company={company} />
         </div>

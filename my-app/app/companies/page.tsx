@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { CompanyListSkeleton } from "@/features/companies/components/company-list-skeleton";
 import { CompanyPageShell } from "@/features/companies/components/company-page-shell";
 import { CompanyResults } from "@/features/companies/components/company-results";
-import { getCompanyFacetsForFilters } from "@/features/companies/lib/queries";
+import { CompanyListSkeleton } from "@/features/companies/components/company-list-skeleton";
+import {
+  getCompanyFacetsForFilters,
+  searchCompanies,
+} from "@/features/companies/lib/queries";
 import {
   parseCompanySearchParams,
   hasActiveCompanyFilters,
@@ -45,14 +48,18 @@ export default async function CompaniesPage({
   searchParams,
 }: CompaniesPageProps) {
   const filters = parseCompanySearchParams(await searchParams);
-  const facets = await getCompanyFacetsForFilters(filters);
+  // Both queries start together. Keeping the result inside Suspense preserves
+  // the page shell while a pagination transition replaces only the list.
+  const facetsPromise = getCompanyFacetsForFilters(filters);
+  const resultPromise = searchCompanies(filters);
+  const facets = await facetsPromise;
 
   return (
     <CompanyPageShell filters={filters} facets={facets}>
       <div className="min-w-0 px-5 py-6 sm:px-8">
         <div className="mx-auto w-full">
           <Suspense fallback={<CompanyListSkeleton />}>
-            <CompanyResults filters={filters} />
+            <CompanyResults filters={filters} result={resultPromise} />
           </Suspense>
         </div>
       </div>

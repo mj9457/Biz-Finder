@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import {
   COMPANY_CATEGORIES,
@@ -49,6 +49,7 @@ const CATEGORY_ORDER_INDEX = new Map(
 const EMPLOYEE_RANGE_ORDER_INDEX = new Map(
   COMPANY_EMPLOYEE_RANGES.map((range, index) => [range.value, index]),
 );
+const FILTER_NAVIGATION_DEBOUNCE_MS = 250;
 
 function sortCategories(categories: CompanyCategory[]) {
   return [...categories].toSorted((a, b) => {
@@ -93,6 +94,9 @@ export function CompanyFilterSidebar({
 }: CompanyFilterSidebarProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const filterNavigationTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [isExecutiveFilterOpen, setIsExecutiveFilterOpen] = useState(true);
   const [isIndustryFilterOpen, setIsIndustryFilterOpen] = useState(true);
   const [isEmployeeFilterOpen, setIsEmployeeFilterOpen] = useState(true);
@@ -109,6 +113,14 @@ export function CompanyFilterSidebar({
   const [selectedEmployeeRanges, setSelectedEmployeeRanges] = useState<
     CompanyEmployeeRange[]
   >(() => sortEmployeeRanges(filters.employeeRanges));
+
+  useEffect(() => {
+    return () => {
+      if (filterNavigationTimer.current) {
+        clearTimeout(filterNavigationTimer.current);
+      }
+    };
+  }, []);
 
   const regionOptions = useMemo<
     Array<{ label: string; value: CompanyRegion | "" }>
@@ -345,9 +357,19 @@ export function CompanyFilterSidebar({
       ...nextPatch,
     });
 
-    startTransition(() => {
-      router.replace(href, { scroll: false });
-    });
+    if (filterNavigationTimer.current) {
+      clearTimeout(filterNavigationTimer.current);
+    }
+
+    filterNavigationTimer.current = setTimeout(() => {
+      startTransition(() => {
+        // This is a same-route filter update. Updating the URL through the
+        // native History API keeps the root layout (and its PWA <head> tags)
+        // mounted; refresh then requests only the new server component data.
+        window.history.replaceState(null, "", href);
+        router.refresh();
+      });
+    }, FILTER_NAVIGATION_DEBOUNCE_MS);
   }
 
   function updateRegion(nextRegion: CompanyRegion | "") {

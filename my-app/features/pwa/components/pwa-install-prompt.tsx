@@ -79,7 +79,16 @@ export function PwaInstallPrompt() {
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     window.addEventListener("appinstalled", handleAppInstalled);
 
-    if ("serviceWorker" in navigator) {
+    if ("serviceWorker" in navigator && process.env.NODE_ENV !== "production") {
+      // Turbopack replaces JavaScript chunks continuously in development.
+      // A service worker can therefore serve a chunk from a different build,
+      // producing hydration errors and a mismatched page shell.
+      void navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+      });
+    } else if ("serviceWorker" in navigator) {
       navigator.serviceWorker
         .register("/sw.js", {
           scope: "/",

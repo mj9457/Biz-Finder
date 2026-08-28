@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 
-import { COMPANY_CSV_DOWNLOAD_AUTH_CODE } from "@/features/companies/lib/export-config";
+import { getCompanyCsvDownloadAuthCode } from "@/features/companies/lib/export-config";
 import { getCompaniesForExport } from "@/features/companies/lib/queries";
 import {
   parseCompanySearchParams,
@@ -28,6 +29,41 @@ function rawSearchParamsFromUrl(searchParams: URLSearchParams) {
   }
 
   return rawParams;
+}
+
+function hasValidAuthCode(authCode: unknown) {
+  if (typeof authCode !== "string" || authCode.length > 256) {
+    return false;
+  }
+
+  const expected = Buffer.from(getCompanyCsvDownloadAuthCode());
+  const received = Buffer.from(authCode.trim());
+
+  return (
+    received.length === expected.length && timingSafeEqual(received, expected)
+  );
+}
+
+async function getExportRequest(request: NextRequest) {
+  try {
+    const body = (await request.json()) as {
+      code?: unknown;
+      query?: unknown;
+    };
+
+    if (typeof body.query !== "string" || body.query.length > 10_000) {
+      return null;
+    }
+
+    return {
+      code: body.code,
+      filters: parseCompanySearchParams(
+        rawSearchParamsFromUrl(new URLSearchParams(body.query)),
+      ),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function protectExcelFormula(value: string) {
@@ -89,17 +125,17 @@ function createCompaniesCsv(companies: Company[]) {
     .join("\r\n");
 }
 
-export async function GET(request: NextRequest) {
-  const authCode = request.nextUrl.searchParams.get("code") ?? "";
+export async function POST(request: NextRequest) {
+  const exportRequest = await getExportRequest(request);
 
-  if (authCode !== COMPANY_CSV_DOWNLOAD_AUTH_CODE) {
-    return new Response("Unauthorized", { status: 401 });
+  if (!exportRequest || !hasValidAuthCode(exportRequest.code)) {
+    return new Response("Unauthorized", {
+      status: 401,
+      headers: { "Cache-Control": "no-store" },
+    });
   }
 
-  const filters = parseCompanySearchParams(
-    rawSearchParamsFromUrl(request.nextUrl.searchParams),
-  );
-  const companies = await getCompaniesForExport(filters);
+  const companies = await getCompaniesForExport(exportRequest.filters);
   const csv = `\uFEFF${createCompaniesCsv(companies)}`;
   const fileName = `gecci_companies-${new Date().toISOString().slice(0, 10)}.csv`;
 
@@ -109,6 +145,8 @@ export async function GET(request: NextRequest) {
       "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(
         fileName,
       )}`,
+      "Cache-Control": "private, no-store, max-age=0",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

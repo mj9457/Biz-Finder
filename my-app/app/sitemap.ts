@@ -13,26 +13,24 @@ const SEO_LANDING_PATHS = [
   "/companies/industry/distribution",
 ] as const;
 
+export const revalidate = 3600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const companies = await getCompaniesForMap();
-  const lastModified = new Date();
 
   return [
     {
       url: absoluteUrl("/companies"),
-      lastModified,
       changeFrequency: "daily",
       priority: 1,
     },
     ...SEO_LANDING_PATHS.map((path) => ({
       url: absoluteUrl(path),
-      lastModified,
       changeFrequency: "weekly" as const,
       priority: 0.8,
     })),
     ...companies.map((company) => ({
       url: absoluteUrl(getCompanyHref(company)),
-      lastModified,
       changeFrequency: "monthly" as const,
       priority: 0.6,
     })),

@@ -1,10 +1,35 @@
-const CACHE_NAME = "biz-finder-pwa-v1";
+const CACHE_NAME = "biz-finder-pwa-v4";
 const PRECACHE_URLS = [
-  "/",
   "/favicon/manifest.json",
   "/favicon/android-icon-192x192.png",
   "/favicon/icon-512x512.png",
 ];
+const PRECACHE_PATHS = new Set(PRECACHE_URLS);
+
+function isPrecachedRequest(request) {
+  const url = new URL(request.url);
+
+  return (
+    url.origin === self.location.origin && PRECACHE_PATHS.has(url.pathname)
+  );
+}
+
+async function getPrecachedResponse(request) {
+  const cachedResponse = await caches.match(request);
+
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+
+  const response = await fetch(request);
+
+  if (response.ok) {
+    const cache = await caches.open(CACHE_NAME);
+    cache.put(request, response.clone()).catch(() => {});
+  }
+
+  return response;
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -35,30 +60,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(
-    (async () => {
-      try {
-        const response = await fetch(event.request);
+  // Serving the PWA manifest and install icons cache-first prevents filter URL
+  // changes from revalidating those static assets.
+  if (isPrecachedRequest(event.request)) {
+    event.respondWith(getPrecachedResponse(event.request));
+    return;
+  }
 
-        if (event.request.url.startsWith(self.location.origin)) {
-          const cache = await caches.open(CACHE_NAME);
-          cache.put(event.request, response.clone()).catch(() => {});
-        }
-
-        return response;
-      } catch (error) {
-        const cachedResponse = await caches.match(event.request);
-
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-
-        if (event.request.mode === "navigate") {
-          return (await caches.match("/")) || Response.error();
-        }
-
-        throw error;
-      }
-    })(),
-  );
+  // Do not intercept navigations, RSC payloads, API calls, or JavaScript
+  // chunks. They must always use the network so different deployments can
+  // never mix a stale page shell with the current list component.
 });
