@@ -894,9 +894,9 @@ async function fetchSearchPage(
   const start = (page - 1) * pageSize;
   const end = start + pageSize - 1;
   let query = supabase.from("companies").select(COMPANY_SELECT_COLUMNS, {
-    // Pagination needs a total, but an exact COUNT(*) can dominate the query
-    // time on every filter change. PostgreSQL's planned count avoids that scan.
-    count: includeCount ? "planned" : undefined,
+    // This value is displayed as "필터에 맞는 기업 수" and drives pagination,
+    // so an optimizer estimate (`planned`) is not correct enough here.
+    count: includeCount ? "exact" : undefined,
   });
 
   query = applySearchFilters(query, filters);
@@ -930,8 +930,20 @@ function getCachedSearchPage(
   return unstable_cache(
     () => fetchSearchPage(filters, page, pageSize, includeCount),
     [
-      "company-search-page",
-      JSON.stringify(filters),
+      // A new key prevents prior five-minute `planned` estimates from being
+      // served after switching the count strategy to exact.
+      "company-search-page-v2-exact-count",
+      // `view` is presentation-only. Excluding it keeps the server cache
+      // shared by direct /companies?view=table and ?view=card visits too.
+      JSON.stringify({
+        q: filters.q,
+        region: filters.region,
+        executiveOnly: filters.executiveOnly,
+        executiveRoles: filters.executiveRoles,
+        categories: filters.categories,
+        employeeRanges: filters.employeeRanges,
+        sort: filters.sort,
+      }),
       String(page),
       String(pageSize),
       includeCount ? "with-count" : "without-count",

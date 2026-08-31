@@ -1,12 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Menu } from "lucide-react";
 
 import type { CompanyFacets, CompanySearchFilters } from "../types";
 import { CompanyHeader } from "./company-header";
 import { CompanyFilterSidebar } from "./company-filter-sidebar";
+import { CompanyViewProvider, useCompanyView } from "./company-view-context";
 
 type CompanyPageShellProps = {
   children: ReactNode;
@@ -19,7 +20,39 @@ export function CompanyPageShell({
   facets,
   filters,
 }: CompanyPageShellProps) {
+  // Remount this client-only UI state after a real data navigation, but not
+  // after a local card/table switch. `view` is deliberately excluded.
+  const viewStateKey = JSON.stringify({
+    q: filters.q,
+    region: filters.region,
+    executiveOnly: filters.executiveOnly,
+    executiveRoles: filters.executiveRoles,
+    categories: filters.categories,
+    employeeRanges: filters.employeeRanges,
+    sort: filters.sort,
+    page: filters.page,
+  });
+
+  return (
+    <CompanyViewProvider key={viewStateKey} initialView={filters.view}>
+      <CompanyPageShellContent filters={filters} facets={facets}>
+        {children}
+      </CompanyPageShellContent>
+    </CompanyViewProvider>
+  );
+}
+
+function CompanyPageShellContent({
+  children,
+  facets,
+  filters,
+}: CompanyPageShellProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const { view } = useCompanyView();
+  const filtersWithCurrentView = useMemo(
+    () => ({ ...filters, view }),
+    [filters, view],
+  );
   const sidebarKey = [
     "filter",
     filters.region,
@@ -42,7 +75,7 @@ export function CompanyPageShell({
           <div className="relative h-full w-[min(380px,calc(100vw-48px))]">
             <CompanyFilterSidebar
               key={`${sidebarKey}-mobile`}
-              filters={filters}
+              filters={filtersWithCurrentView}
               facets={facets}
               idPrefix="company-filter-mobile"
               isMobileDrawer
@@ -72,7 +105,7 @@ export function CompanyPageShell({
           <div className="hidden shrink-0 lg:block lg:w-[380px] lg:py-5 lg:pl-5">
             <CompanyFilterSidebar
               key={sidebarKey}
-              filters={filters}
+              filters={filtersWithCurrentView}
               facets={facets}
               idPrefix="company-filter-desktop"
             />

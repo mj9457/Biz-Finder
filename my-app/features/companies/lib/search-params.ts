@@ -23,7 +23,6 @@ export type RawSearchParams = Record<
 >;
 
 export const DEFAULT_PAGE_SIZE = 10;
-const DEFAULT_CARD_PAGE_SIZE = 6;
 export const DEFAULT_COMPANY_VIEW: CompanyView = "table";
 
 const categorySet = new Set<string>(COMPANY_CATEGORIES);
@@ -144,7 +143,10 @@ export function parseCompanySearchParams(
     sort: parseSort(params.sort),
     view,
     page: parsePage(params.page),
-    pageSize: view === "card" ? DEFAULT_CARD_PAGE_SIZE : DEFAULT_PAGE_SIZE,
+    // A view change only changes presentation. Keeping the page size stable
+    // means the already-loaded page can be displayed as either cards or a
+    // table without issuing a different search query.
+    pageSize: DEFAULT_PAGE_SIZE,
   };
 }
 

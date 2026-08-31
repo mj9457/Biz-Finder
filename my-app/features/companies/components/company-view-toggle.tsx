@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { LayoutGrid, Table2 } from "lucide-react";
 
-import { createCompanySearchHref } from "../lib/search-params";
-import type { CompanySearchFilters, CompanyView } from "../types";
+import type { CompanyView } from "../types";
 
 type CompanyViewToggleProps = {
-  filters: CompanySearchFilters;
+  view: CompanyView;
+  onViewChange: (view: CompanyView) => void;
 };
 
 const viewOptions = [
@@ -17,24 +16,26 @@ const viewOptions = [
   Icon: typeof Table2;
 }>;
 
-export function CompanyViewToggle({ filters }: CompanyViewToggleProps) {
+export function CompanyViewToggle({
+  view,
+  onViewChange,
+}: CompanyViewToggleProps) {
   return (
     <div
       className="inline-flex w-full rounded-md border border-slate-300 bg-white p-1 sm:w-auto"
       aria-label="기업 목록 보기 방식"
     >
       {viewOptions.map((option) => {
-        const isActive = filters.view === option.value;
+        const isActive = view === option.value;
         const Icon = option.Icon;
 
         return (
-          <Link
+          <button
+            type="button"
             key={option.value}
-            href={createCompanySearchHref(filters, {
-              view: option.value,
-              page: filters.page,
-            })}
+            onClick={() => onViewChange(option.value)}
             aria-current={isActive ? "true" : undefined}
+            aria-pressed={isActive}
             className={[
               "inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded px-3 text-sm font-semibold transition sm:min-w-16 sm:flex-none",
               isActive
@@ -44,7 +45,7 @@ export function CompanyViewToggle({ filters }: CompanyViewToggleProps) {
           >
             <Icon className="mr-1.5 size-4" aria-hidden="true" />
             {option.label}
-          </Link>
+          </button>
         );
       })}
     </div>

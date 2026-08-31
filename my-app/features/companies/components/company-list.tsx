@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useMemo } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -20,6 +23,7 @@ import { CompanyKeywordSearch } from "./company-keyword-search";
 import { CompanyTable } from "./company-table";
 import { CompanyViewToggle } from "./company-view-toggle";
 import { CompanySortControl } from "./company-sort-control";
+import { useCompanyView } from "./company-view-context";
 
 type CompanyListProps = {
   result: CompanySearchResult;
@@ -75,22 +79,46 @@ function getVisiblePages(
 }
 
 export function CompanyList({ result, filters }: CompanyListProps) {
-  const mobileVisiblePages = getVisiblePages(result.page, result.totalPages, 5);
-  const desktopVisiblePages = getVisiblePages(
-    result.page,
-    result.totalPages,
-    10,
+  const { view, setView } = useCompanyView();
+  const currentFilters = useMemo(
+    () => ({ ...filters, view }),
+    [filters, view],
   );
+  const mobileVisiblePages = useMemo(
+    () => getVisiblePages(result.page, result.totalPages, 5),
+    [result.page, result.totalPages],
+  );
+  const desktopVisiblePages = useMemo(
+    () => getVisiblePages(result.page, result.totalPages, 10),
+    [result.page, result.totalPages],
+  );
+
+  function updateView(nextView: typeof view) {
+    if (nextView === view) {
+      return;
+    }
+
+    setView(nextView);
+
+    // Native history updates the shareable URL without invoking a Next.js
+    // navigation, so no RSC payload, API call, or database query is made.
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", nextView);
+    window.history.replaceState(window.history.state, "", url);
+  }
 
   return (
     <section className="grid min-w-0 gap-4">
       <div className="grid min-w-0 max-w-[calc(100vw-40px)] gap-4 sm:max-w-none xl:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <CompanyKeywordSearch key={`search-${filters.q}`} filters={filters} />
+          <CompanyKeywordSearch
+            key={`search-${currentFilters.q}`}
+            filters={currentFilters}
+          />
         </div>
         <div className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:justify-end">
-          <CompanyCsvDownload filters={filters} />
-          <CompanyViewToggle filters={filters} />
+          <CompanyCsvDownload filters={currentFilters} />
+          <CompanyViewToggle view={view} onViewChange={updateView} />
         </div>
       </div>
 
@@ -102,16 +130,16 @@ export function CompanyList({ result, filters }: CompanyListProps) {
           </strong>
         </p>
         <div className="flex justify-end">
-          <CompanySortControl filters={filters} />
+          <CompanySortControl filters={currentFilters} />
         </div>
       </div>
 
       {result.total === 0 ? (
-        <EmptyCompanyResult filters={filters} />
-      ) : filters.view === "card" ? (
+        <EmptyCompanyResult filters={currentFilters} />
+      ) : view === "card" ? (
         <CompanyCardList companies={result.items} />
       ) : (
-        <CompanyTable companies={result.items} filters={filters} />
+        <CompanyTable companies={result.items} filters={currentFilters} />
       )}
 
       {result.totalPages > 1 ? (
@@ -121,7 +149,7 @@ export function CompanyList({ result, filters }: CompanyListProps) {
         >
           <Link
             aria-disabled={result.page <= 1}
-            href={createCompanySearchHref(filters, { page: 1 })}
+            href={createCompanySearchHref(currentFilters, { page: 1 })}
             className="inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-0 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40 sm:h-10 sm:flex-none sm:px-3"
           >
             <ChevronsLeft className="size-4 sm:mr-1" aria-hidden="true" />
@@ -131,8 +159,8 @@ export function CompanyList({ result, filters }: CompanyListProps) {
             aria-disabled={result.page <= 1}
             href={
               result.page <= 1
-                ? createCompanySearchHref(filters, { page: 1 })
-                : createCompanySearchHref(filters, { page: result.page - 1 })
+                ? createCompanySearchHref(currentFilters, { page: 1 })
+                : createCompanySearchHref(currentFilters, { page: result.page - 1 })
             }
             className="inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-0 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40 sm:h-10 sm:flex-none sm:px-3"
           >
@@ -147,7 +175,7 @@ export function CompanyList({ result, filters }: CompanyListProps) {
                 <Link
                   key={page}
                   aria-current={isCurrent ? "page" : undefined}
-                  href={createCompanySearchHref(filters, { page })}
+                  href={createCompanySearchHref(currentFilters, { page })}
                   className={[
                     "inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-md border text-xs font-semibold transition",
                     isCurrent
@@ -168,7 +196,7 @@ export function CompanyList({ result, filters }: CompanyListProps) {
                 <Link
                   key={page}
                   aria-current={isCurrent ? "page" : undefined}
-                  href={createCompanySearchHref(filters, { page })}
+                  href={createCompanySearchHref(currentFilters, { page })}
                   className={[
                     "inline-flex size-10 items-center justify-center rounded-md border text-sm font-semibold transition",
                     isCurrent
@@ -185,8 +213,8 @@ export function CompanyList({ result, filters }: CompanyListProps) {
             aria-disabled={result.page >= result.totalPages}
             href={
               result.page >= result.totalPages
-                ? createCompanySearchHref(filters, { page: result.totalPages })
-                : createCompanySearchHref(filters, { page: result.page + 1 })
+                ? createCompanySearchHref(currentFilters, { page: result.totalPages })
+                : createCompanySearchHref(currentFilters, { page: result.page + 1 })
             }
             className="inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-0 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40 sm:h-10 sm:flex-none sm:px-3"
           >
@@ -195,7 +223,7 @@ export function CompanyList({ result, filters }: CompanyListProps) {
           </Link>
           <Link
             aria-disabled={result.page >= result.totalPages}
-            href={createCompanySearchHref(filters, { page: result.totalPages })}
+            href={createCompanySearchHref(currentFilters, { page: result.totalPages })}
             className="inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-0 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 aria-disabled:pointer-events-none aria-disabled:opacity-40 sm:h-10 sm:flex-none sm:px-3"
           >
             <span className="sr-only sm:not-sr-only">끝</span>
